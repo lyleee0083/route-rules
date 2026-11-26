@@ -19,3 +19,8 @@
 - Use [README.md](README.md) as the entry point. Document actual inputs, rule formats, build and validation commands, and artifact locations when adding rules or generation tooling.
 - Record the source, version, and license of imported rules. Check syntax, duplicates, and ordering or precedence according to the data format. Verify each generation step that the repository provides.
 - Keep documentation aligned with the repository's actual files and workflows. Deliver generated rule packages through the project's artifact channel.
+
+## Versioned deliverables
+
+- When a change affects a versioned deliverable, build and deliver the latest authorized repository state. Advance the project release version and use it consistently in the output filename, archive directory, package metadata and the executable or application's reported version where applicable.
+- Record upstream versions and revisions separately. Check the version and checksum in the final artifact. Follow the authorized scope for publishing and deployment.
