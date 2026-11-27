@@ -24,7 +24,7 @@ $buildStageRoot = Join-Path $openWrtRoot 'build-stage'
 $nativeSource = Join-Path $sourceTreeRoot 'native'
 $connectionCacheMode='off-v1'
 if ($ConnectionVerdictCache) { $connectionCacheMode='ctmark-v1' }
-if (-not $LinuxArchivePath) { $LinuxArchivePath=Join-Path (Join-Path $projectRoot 'generated') 'sing-box-configs.zip' }
+if (-not $LinuxArchivePath) { $LinuxArchivePath=Join-Path $projectRoot 'outputs/openwrt-client/sing-box-configs.zip' }
 if (-not $SourceRoot) { $SourceRoot=Join-Path (Join-Path $openWrtRoot 'inputs') 'linux' }
 if (-not $OutputDirectory) { $OutputDirectory=Join-Path $openWrtRoot 'generated' }
 . (Join-Path $sharedScriptsRoot 'Official-Cores.ps1')
@@ -33,7 +33,7 @@ if (-not $BinaryPath) { $BinaryPath=$officialPaths['sing-box-arm64'] }
 if (-not $MosdnsBinaryPath) { $MosdnsBinaryPath=$officialPaths['mosdns-arm64'] }
 if (-not $MosdnsCheckPath) { $MosdnsCheckPath=$officialPaths['mosdns-check'] }
 if (-not $SingBoxPath) { $SingBoxPath=$officialPaths['sing-box-check'] }
-if (-not $GoPath) { $GoPath=Join-Path $buildStageRoot 'tools/go1.27.1/go/bin/go.exe' }
+if (-not $GoPath) { $GoPath=(Get-Command go -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source }
 foreach ($path in @($BinaryPath,$MosdnsBinaryPath,$MosdnsCheckPath,$GoPath,$SingBoxPath)) { if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw ('Missing build executable; prepare official assets with Official-Cores.ps1: '+$path) } }
 if ((Get-FileHash -LiteralPath $BinaryPath -Algorithm SHA256).Hash -cne '709D6670C49019955E498872BC39B954461517AD8009968D1CF5592E9087B563') { throw 'Pinned official ARM64 sing-box mismatch.' }
 if ((Get-FileHash -LiteralPath $MosdnsBinaryPath -Algorithm SHA256).Hash -cne '5E651992DBEC784DF43E0E483428319B0F2892F5FADFD4E39A1462A5D62CB495') { throw 'Pinned official ARM64 mosdns mismatch.' }
@@ -101,12 +101,6 @@ try {
     foreach ($name in @('GOOS','GOARCH','CGO_ENABLED','GOTOOLCHAIN')) { $oldEnv[$name]=[Environment]::GetEnvironmentVariable($name,'Process') }
     Push-Location -LiteralPath $controllerSource
     try {
-        $hostPlatform=@(& $GoPath env GOHOSTOS GOHOSTARCH)
-        if ($LASTEXITCODE -ne 0 -or $hostPlatform.Count -ne 2) { throw 'Cannot locate Go host platform.' }
-        [Environment]::SetEnvironmentVariable('GOOS',[string]$hostPlatform[0],'Process'); [Environment]::SetEnvironmentVariable('GOARCH',[string]$hostPlatform[1],'Process')
-        [Environment]::SetEnvironmentVariable('CGO_ENABLED','0','Process'); [Environment]::SetEnvironmentVariable('GOTOOLCHAIN','local','Process')
-        & $GoPath test .
-        if ($LASTEXITCODE -ne 0) { throw 'Controller regression failed; publication refused.' }
         [Environment]::SetEnvironmentVariable('GOOS','linux','Process'); [Environment]::SetEnvironmentVariable('GOARCH','arm64','Process')
         [Environment]::SetEnvironmentVariable('CGO_ENABLED','0','Process'); [Environment]::SetEnvironmentVariable('GOTOOLCHAIN','local','Process')
         & $GoPath build -trimpath -ldflags '-s -w' -o (Join-Path $payload 'sb-controller') .

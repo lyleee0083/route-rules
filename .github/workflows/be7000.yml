@@ -51,7 +51,7 @@ jobs:
           $null = Install-OpenWrtBuildCores
       - name: Generate the Linux client snapshot
         run: |
-          ./scripts/Generate-SingBoxConfig.ps1 -All -RequireSingBox
+          ./scripts/Generate-SingBoxConfig.ps1 -Client linux -OutputDirectory outputs/openwrt-client -RequireSingBox
           ./openwrt/scripts/Sync-FinalLinuxSnapshot.ps1
       - name: Build and verify the BE7000 package
         run: |
@@ -65,8 +65,17 @@ jobs:
         id: artifact
         run: |
           ./scripts/Export-CiArtifact.ps1 -Component xiaomi-be7000 -PackagePath openwrt/generated/openwrt.zip -BuildManifestPath openwrt/outputs/build/build-manifest.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - name: Upload delivery files
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ steps.artifact.outputs.name }}
           path: ${{ steps.artifact.outputs.path }}
+          if-no-files-found: error
+      - name: Upload build information
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.artifact.outputs.name }}-build-info
+          path: ${{ steps.artifact.outputs.evidence_path }}
           if-no-files-found: error

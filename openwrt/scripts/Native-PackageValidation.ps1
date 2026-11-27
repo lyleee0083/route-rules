@@ -211,7 +211,6 @@ function Assert-MosdnsRuntimeConfiguration {
             RedirectStandardError = $stderr
             PassThru = $true
         }
-        if ([IO.Path]::DirectorySeparatorChar -eq [char]'\') { $launch.WindowStyle = 'Hidden' }
         $child = Start-Process @launch
         $ready=$false
         $apiReady=$false

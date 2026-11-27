@@ -5,7 +5,7 @@ $ErrorActionPreference='Stop'
 $openWrtRoot=Split-Path -Parent $PSScriptRoot
 $scriptsRoot=Join-Path $openWrtRoot 'scripts'
 $canonicalLinuxInputRoot=Join-Path $openWrtRoot 'inputs/linux'
-$canonicalLinuxArchive=Join-Path (Split-Path -Parent $openWrtRoot) 'generated/sing-box-configs.zip'
+$canonicalLinuxArchive=Join-Path (Split-Path -Parent $openWrtRoot) 'outputs/openwrt-client/sing-box-configs.zip'
 if ([string]::IsNullOrWhiteSpace($SourceRoot) -xor [string]::IsNullOrWhiteSpace($LinuxArchivePath)) { throw 'SourceRoot and LinuxArchivePath must be supplied together for isolated source validation.' }
 if ([string]::IsNullOrWhiteSpace($SourceRoot)) { $SourceRoot=$canonicalLinuxInputRoot; $LinuxArchivePath=$canonicalLinuxArchive }
 if (-not (Test-Path -LiteralPath $SourceRoot -PathType Container) -or -not (Test-Path -LiteralPath $LinuxArchivePath -PathType Leaf)) { throw 'Test source snapshot and final Linux archive must both exist.' }
@@ -47,8 +47,7 @@ function Test-MosdnsValidationCleanupRejectsReparseTree {
     [IO.Directory]::CreateDirectory($target) | Out-Null
     [IO.File]::WriteAllText($marker,'outside fixture tree',(New-Object Text.UTF8Encoding($false)))
     try {
-        $linkType = if ([IO.Path]::DirectorySeparatorChar -eq [char]'/') { 'SymbolicLink' } else { 'Junction' }
-        New-Item -ItemType $linkType -Path $link -Target $target -ErrorAction Stop | Out-Null
+        New-Item -ItemType SymbolicLink -Path $link -Target $target -ErrorAction Stop | Out-Null
         $rejected=$false
         try { Remove-OpenWrtTaskScratchDirectory -Path $fixture -Prefix 'sb-mosdns-reparse-fixture' }
         catch { $rejected=$_.Exception.Message -match 'reparse point' }

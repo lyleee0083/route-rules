@@ -7,7 +7,7 @@ $scriptsRoot=Join-Path $openWrtRoot 'scripts'
 . (Join-Path (Join-Path (Split-Path -Parent $openWrtRoot) 'scripts') 'Official-Cores.ps1')
 if (-not $PackagePath) { $PackagePath=Join-Path $openWrtRoot 'generated/openwrt.zip' }
 if (-not $MosdnsPath) { $MosdnsPath=(Get-OpenWrtCorePaths)['mosdns-check'] }
-if (-not $GoPath) { $GoPath=Join-Path $openWrtRoot 'build-stage/tools/go1.27.1/go/bin/go.exe' }
+if (-not $GoPath) { $GoPath=(Get-Command go -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source }
 foreach ($path in @($PackagePath,$MosdnsPath,$GoPath)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw ('Missing isolated DNS test input: '+$path) }
 }
