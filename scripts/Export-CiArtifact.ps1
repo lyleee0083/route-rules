@@ -18,6 +18,9 @@ if (($Component -eq 'xiaomi-be7000') -ne [bool]$BuildManifestPath) {
 }
 
 $name = "route-rules-$version"
+if ($Component -ceq 'xiaomi-be7000') {
+    $name = "route-rules-xiaomi-be7000-$version"
+}
 $artifactRoot = Join-Path $root "outputs/ci-artifacts/$name"
 $packageName = "$name.zip"
 $package = Join-Path $artifactRoot $packageName
