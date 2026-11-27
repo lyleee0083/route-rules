@@ -18,8 +18,7 @@ function Resolve-PinnedSingBoxChecker {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$ProjectRoot,
-        [string]$RequestedPath,
-        [string]$RuntimeFallbackPath='D:\Software\sing-box\sing-box.exe'
+        [string]$RequestedPath
     )
 
     if ($RequestedPath) {
@@ -34,7 +33,7 @@ function Resolve-PinnedSingBoxChecker {
     . $officialScript
 
     $checkerAssets=@(Get-OpenWrtOfficialAssets | Where-Object { $_.Platform -ceq 'sing-box-check' })
-    if ($checkerAssets.Count -ne 1) { throw 'The project must have exactly one pinned Windows sing-box checker asset.' }
+    if ($checkerAssets.Count -ne 1) { throw 'The project must have exactly one pinned sing-box checker asset.' }
     $asset=$checkerAssets[0]
     $coreRoot=Join-Path $projectRootFull 'openwrt\build-stage\cores'
     $paths=Get-OpenWrtCorePaths -Root $coreRoot
@@ -53,12 +52,7 @@ function Resolve-PinnedSingBoxChecker {
         $legacyEntries=@(Get-ChildItem -LiteralPath $coreRoot -Force -ErrorAction Stop | Where-Object { $_.Name -match '^sing-box-' })
         if ($legacyEntries.Count -gt 0) { $hasPinnedProjectCore=$true }
     }
-    if (-not $hasPinnedProjectCore) {
-        if ($RuntimeFallbackPath -and [IO.File]::Exists($RuntimeFallbackPath)) { return [IO.Path]::GetFullPath($RuntimeFallbackPath) }
-        $command=Get-Command 'sing-box' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($command) { return [IO.Path]::GetFullPath($command.Source) }
-        return $null
-    }
+    if (-not $hasPinnedProjectCore) { return $null }
 
     if ($null -eq $archiveItem -or $null -eq $binaryItem) {
         throw ('The project pinned sing-box 1.14.4 checker installation is incomplete: '+$binary)

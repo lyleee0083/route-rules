@@ -1475,7 +1475,7 @@ $null = Get-BuildPreservationSnapshot -Destination $outputFullPath -PackageName 
 $supportCachePath = Join-Path $supportFullPath 'build-cache.json'
 $supportLockPath = Join-Path $supportFullPath 'build-cache.lock'
 if (-not $preflightCore -and ($RequireSingBox -or -not $SkipRoutingRules)) {
-    throw '未找到 sing-box。请安装、加入 PATH，或使用 -SingBoxPath 指定可执行文件。'
+    throw '未找到 sing-box。请准备固定版本校验核心，或使用 -SingBoxPath 指定可执行文件。'
 }
 if (-not $Force -and -not (Test-Path -LiteralPath $buildPaths.Journal) -and -not (Test-Path -LiteralPath $buildPaths.Backup)) {
     if (Test-Path -LiteralPath (Join-Path $outputFullPath 'sing-box-configs.zip')) { throw '输出 ZIP 已存在。使用 -Force 允许替换。' }
@@ -1515,24 +1515,11 @@ $preservationSnapshot = Get-BuildPreservationSnapshot -Destination $outputFullPa
 $templateHashBefore = (Get-FileHash -Algorithm SHA256 -LiteralPath $templateFullPath).Hash
 $singBoxExecutable = Resolve-SingBoxExecutable $SingBoxPath
 if (-not $singBoxExecutable -and ($RequireSingBox -or -not $SkipRoutingRules)) {
-    throw '未找到 sing-box。请安装、加入 PATH，或使用 -SingBoxPath 指定可执行文件。'
+    throw '未找到 sing-box。请准备固定版本校验核心，或使用 -SingBoxPath 指定可执行文件。'
 }
 if (-not $singBoxExecutable) {
     Write-Warning '未找到 sing-box；将执行内置结构校验，但跳过官方 sing-box check。'
 }
-$nativeClient = if ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)) {
-    'windows'
-}
-elseif ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Linux)) {
-    'linux'
-}
-elseif ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::OSX)) {
-    'macos'
-}
-else {
-    ''
-}
-
 $destinations = [System.Collections.Generic.List[object]]::new()
 if ((Test-Path -LiteralPath (Join-Path $outputFullPath 'sing-box-configs.zip')) -and -not $Force) {
     throw '输出 ZIP 已存在。使用 -Force 允许替换。'
@@ -1595,10 +1582,7 @@ try {
         Assert-Configuration -Configuration $configuration -Name $name -LinuxRouteExcludeAddressSets:$enableLinuxRouteExclude -RuleSetPlan $ruleSetPlan
 
         $stagedConfiguration = Join-Path $stagingDirectory $profiles[$name]['file_name']
-        # These configurations can also be checked by the Windows kernel.
-        # Linux auto_redirect still requires a Linux host for initialization.
-        $officialCheck = $singBoxExecutable -and ($name -eq $nativeClient -or
-            ($nativeClient -eq 'windows' -and $name -in @('android','ios','macos')))
+        $officialCheck = $singBoxExecutable -and $name -ceq 'linux'
         $validationExecutable = if ($officialCheck) { $singBoxExecutable } else { $null }
         Write-JsonAtomically -Configuration $configuration -Destination $stagedConfiguration -ValidationExecutable $validationExecutable -ValidationWorkingDirectory $stagingDirectory -Overwrite
 

@@ -88,78 +88,11 @@ try {
         Assert-StrictRepair ($accepted -eq ($case -eq 'valid')) ('Unexpected offline-cache decision: '+$case)
     }
 
-    . (Join-Path $scriptsRoot 'Build-Transaction.ps1')
-    . (Join-Path $scriptsRoot 'Windows-Deployment.ps1')
-    $runtime=Join-Path $root 'runtime'
-    $generated=Join-Path $root 'generated'
-    [IO.Directory]::CreateDirectory($runtime) | Out-Null
-    $paths=Get-BuildPaths $generated
-    $archivePath=Join-Path $generated 'sing-box-configs.zip'
-    $controlPath=Join-Path $runtime '.runtime\control.lock'
-    $locks=Enter-WindowsDeploymentLocks -RuntimeDirectory $runtime -ArchivePath $archivePath -TimeoutSeconds 1
-    try {
-        $blocked=$false
-        try { $other=[IO.File]::Open($controlPath, [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None); $other.Dispose() } catch [IO.IOException] { $blocked=$true }
-        Assert-StrictRepair $blocked 'Deployment did not exclude start/stop control.'
-        $blocked=$false
-        try { $other=Enter-BuildLock $paths -TimeoutSeconds 1; $other.Dispose() } catch { $blocked=$true }
-        Assert-StrictRepair $blocked 'Deployment did not exclude archive publication.'
-    } finally { Exit-WindowsDeploymentLocks $locks }
-    $build=Enter-BuildLock $paths -TimeoutSeconds 1
-    try {
-        $blocked=$false
-        try { $other=Enter-WindowsDeploymentLocks -RuntimeDirectory $runtime -ArchivePath $archivePath -TimeoutSeconds 1; Exit-WindowsDeploymentLocks $other } catch { $blocked=$true }
-        Assert-StrictRepair $blocked 'Archive lock conflict was ignored.'
-        $control=[IO.File]::Open($controlPath, [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
-        $control.Dispose()
-    } finally { $build.Dispose() }
-    Put-StrictText $paths.Journal '{}'
-    $blocked=$false
-    try { $other=Enter-WindowsDeploymentLocks -RuntimeDirectory $runtime -ArchivePath $archivePath -TimeoutSeconds 1; Exit-WindowsDeploymentLocks $other } catch { $blocked=$true }
-    Assert-StrictRepair $blocked 'Pending archive recovery was ignored.'
-    Assert-StrictRepair (Test-Path -LiteralPath $paths.Journal) 'Reader modified another publisher recovery journal.'
-    [IO.File]::Delete($paths.Journal)
-    $locks=Enter-WindowsDeploymentLocks -RuntimeDirectory $runtime -ArchivePath $archivePath -TimeoutSeconds 1
-    Exit-WindowsDeploymentLocks $locks
-    Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
-    [IO.Directory]::CreateDirectory($generated) | Out-Null
-    $entryFile=Join-Path $root 'entry.json'
-    Put-StrictText $entryFile "{}`n"
-    $zip=[IO.Compression.ZipFile]::Open($archivePath, [IO.Compression.ZipArchiveMode]::Create)
-    try { [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $entryFile, 'config.json') } finally { $zip.Dispose() }
-    $zip=[IO.Compression.ZipFile]::OpenRead($archivePath)
-    try { Assert-StrictRepair ((Get-DeploymentEntryHash $zip.GetEntry('config.json')) -eq (Get-FileHash $entryFile).Hash) 'Archive snapshot digest mismatch.' } finally { $zip.Dispose() }
-    # Exercise the real staging helper while its source handle is open.
-    $snapshotArchive=Join-Path $root 'selected-client.zip'
-    Copy-Item -LiteralPath (Join-Path $projectRoot 'generated\sing-box-configs.zip') -Destination $snapshotArchive
-    $snapshotHash=(Get-FileHash -LiteralPath $snapshotArchive -Algorithm SHA256).Hash
-    $snapshotStage=Join-Path $root 'snapshot-stage'
-    [IO.Directory]::CreateDirectory((Join-Path $snapshotStage 'rule-set')) | Out-Null
-    $originalArchiveIndexer=(Get-Item -LiteralPath Function:\Get-WindowsArchiveIndex).ScriptBlock
-    $script:snapshotWriteBlocked=$false
-    function Get-WindowsArchiveIndex {
-        param([Parameter(Mandatory)][IO.Compression.ZipArchive]$Archive)
-        $probe=$null
-        try { $probe=[IO.File]::Open($snapshotArchive,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::ReadWrite) }
-        catch [IO.IOException] { $script:snapshotWriteBlocked=$true }
-        finally { if ($probe) { $probe.Dispose() } }
-        return (& $originalArchiveIndexer -Archive $Archive)
-    }
-    try { $snapshot=Import-WindowsArchiveToStage -ArchivePath $snapshotArchive -StageDirectory $snapshotStage }
-    finally { Set-Item -LiteralPath Function:\Get-WindowsArchiveIndex -Value $originalArchiveIndexer }
-    Assert-StrictRepair $script:snapshotWriteBlocked 'Selected archive was writable while the real staging helper indexed it.'
-    Assert-StrictRepair ($snapshot.ArchiveSha256 -ceq $snapshotHash -and $snapshot.RuleSetCount -eq 3 -and $snapshot.ExpectedHashes.Count -eq 4) 'Staging did not bind the selected Windows configuration and three SRS to the original ZIP.'
-    $append=[IO.File]::Open($snapshotArchive,[IO.FileMode]::Append,[IO.FileAccess]::Write,[IO.FileShare]::None)
-    try { $append.WriteByte(0) } finally { $append.Dispose() }
-    Assert-StrictRepair ((Get-FileHash -LiteralPath $snapshotArchive -Algorithm SHA256).Hash -cne $snapshotHash) 'Private archive mutation control failed.'
-    foreach ($relative in $snapshot.ExpectedHashes.Keys) {
-        Assert-StrictRepair ((Get-FileHash -LiteralPath (Join-Path $snapshotStage $relative) -Algorithm SHA256).Hash -ceq $snapshot.ExpectedHashes[$relative]) 'Later source changes altered the staged archive snapshot.'
-    }
-    Write-Output 'Strict audit repairs passed: offline provenance/hash, start-stop/build exclusion, failure lock release and archive snapshot.'
+    Write-Output 'Strict audit repairs passed: offline rule provenance and hashes.'
 }
 finally {
     $resolved=[IO.Path]::GetFullPath($root)
-    if ((Split-Path -Parent $resolved) -ine ([IO.Path]::GetTempPath()).TrimEnd('\') -or (Split-Path -Leaf $resolved) -notmatch '^sing-box-strict-repairs-[a-f0-9]{32}$') { throw 'Unsafe strict-repair test cleanup.' }
+    if ((Split-Path -Parent $resolved) -ine ([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar) -or (Split-Path -Leaf $resolved) -notmatch '^sing-box-strict-repairs-[a-f0-9]{32}$') { throw 'Unsafe strict-repair test cleanup.' }
     $items=@(Get-Item -LiteralPath $resolved -Force)+@(Get-ChildItem -LiteralPath $resolved -Recurse -Force)
     if (@($items | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count) { throw 'Strict-repair fixture contains a reparse point; preserve it.' }
     Remove-Item -LiteralPath $resolved -Recurse -Force

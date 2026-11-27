@@ -9,8 +9,8 @@
 
 ## 快速开始
 
-1. 从 [Clients 工作流](https://github.com/lyleee0083/route-rules/actions/workflows/clients.yml) 的成功运行下载 `route-rules-clients-v<版本>`，对照 `SHA256SUMS.txt` 核对内部 ZIP。
-2. 解压内部 ZIP，选择对应平台的 `sing-box-*.json`。保留同目录下的 `rule-set/`。
+1. 从 [GitHub Releases](https://github.com/lyleee0083/route-rules/releases) 下载 `route-rules-clients-v<版本>.zip` 和 `SHA256SUMS.txt`，对照 `SHA256SUMS.txt` 核对 ZIP。
+2. 解压 ZIP，选择对应平台的 `sing-box-*.json`。保留同目录下的 `rule-set/`。
 3. 在本地填写 `outbounds` 中 `tag` 为 `proxy` 的 VLESS REALITY 节点。构建包使用示例地址、UUID、公钥和短 ID。使用 sing-box 1.14.4 或支持 SRS v5 的兼容核心加载配置。
 
 ## 配置
@@ -21,7 +21,7 @@
 
 ## 构建与测试
 
-[客户端工作流](.github/workflows/clients.yml)在 GitHub Actions 的 ubuntu-latest 下载并校验固定的 sing-box 1.14.4、刷新规则、运行规则与归档测试、生成五平台 ZIP，再解码检查交付的 SRS。推送 `main`、向 `main` 提交 PR 或手动运行均会触发。每次构建的输入 URL 和内容 SHA-256 记录在 `build-info.json`。客户端 CI 验证覆盖规则与配置，实际平台 TUN 和节点连通性由设备验收确认。
+[客户端工作流](.github/workflows/clients.yml)在 GitHub Actions 的 ubuntu-latest 下载并校验固定的 sing-box 1.14.4、刷新规则、运行规则与归档测试、生成五平台 ZIP，再解码检查交付的 SRS。推送 `main`、向 `main` 提交 PR 或手动运行均会触发。每次构建的输入 URL 和内容 SHA-256 单独记录在 Actions 构建信息工件。客户端 CI 验证覆盖规则与配置，实际平台 TUN 和节点连通性由设备验收确认。
 
 ## 仓库结构
 
@@ -32,7 +32,7 @@
 
 ## 版本发布
 
-`VERSION` 对应版本化的 Actions 工件。工件含可解压的配置 ZIP、`SHA256SUMS.txt`、`build-info.json` 和第三方来源说明。
+`VERSION` 对应交付版本。客户端交付包含配置 ZIP 和 `SHA256SUMS.txt`。ZIP 内包含五份配置和它们引用的本地 SRS。
 
 ## 许可证
 

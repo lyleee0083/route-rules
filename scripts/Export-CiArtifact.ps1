@@ -59,11 +59,9 @@ else {
 }
 
 $encoding = New-Object Text.UTF8Encoding($false)
-$manifestPath = Join-Path $artifactRoot 'build-info.json'
+$evidenceRoot = Join-Path $root "outputs/ci-build-info/$name"
+[void][IO.Directory]::CreateDirectory($evidenceRoot)
+$manifestPath = Join-Path $evidenceRoot 'build-info.json'
 [IO.File]::WriteAllText($manifestPath, (($metadata | ConvertTo-Json -Depth 30) + "`n"), $encoding)
-Copy-Item -LiteralPath (Join-Path $root 'docs/THIRD-PARTY.md') -Destination (Join-Path $artifactRoot 'THIRD-PARTY.md')
-$checksums = foreach ($file in @($packageName,'build-info.json','THIRD-PARTY.md')) {
-    '{0}  {1}' -f (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $artifactRoot $file)).Hash.ToLowerInvariant(),$file
-}
-[IO.File]::WriteAllText((Join-Path $artifactRoot 'SHA256SUMS.txt'), (($checksums -join "`n") + "`n"), $encoding)
-[IO.File]::AppendAllText($env:GITHUB_OUTPUT, "name=$name`npath=$artifactRoot`n", $encoding)
+[IO.File]::WriteAllText((Join-Path $artifactRoot 'SHA256SUMS.txt'), "$hash  $packageName`n", $encoding)
+[IO.File]::AppendAllText($env:GITHUB_OUTPUT, "name=$name`npath=$artifactRoot`nevidence_path=$manifestPath`n", $encoding)
