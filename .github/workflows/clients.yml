@@ -33,7 +33,7 @@ jobs:
           ./tests/Test-SameTypeDirectPolicy.ps1
           ./tests/Test-ConfigArchive.ps1
           ./tests/Test-ClientPathSafety.ps1
-          ./tests/Test-SingBoxCoreResolution.ps1
+          ./tests/Test-SingBoxCoreResolution.ps1 -TestRoot (Join-Path $PWD.Path 'outputs/tests/core-resolution')
       - name: Generate and verify the five client profiles
         run: |
           ./scripts/Generate-SingBoxConfig.ps1 -All -RequireSingBox
