@@ -1,10 +1,18 @@
 # Official release assets only. Downloads are validated before extraction/use.
 function Get-OpenWrtOfficialAssets {
     @(
-        [pscustomobject]@{ Name='sing-box-1.14.4-linux-arm64-musl.tar.gz'; Repository='SagerNet/sing-box'; Tag='v1.14.4'; SHA256='B95E25F921DC5E17A4CF13327243D1177642C7E35425BF5372862C477C359F56'; Length=[int64]29763014; Binary='sing-box-1.14.4-linux-arm64-musl/sing-box'; BinarySHA256='709D6670C49019955E498872BC39B954461517AD8009968D1CF5592E9087B563'; Platform='sing-box-arm64' },
-        [pscustomobject]@{ Name='sing-box-1.14.4-windows-amd64.zip'; Repository='SagerNet/sing-box'; Tag='v1.14.4'; SHA256='99185D75D314A07DBBA4A130C8AD986CBEB629A07927975636B341CA61F991DF'; Length=[int64]32891280; Binary='sing-box-1.14.4-windows-amd64/sing-box.exe'; BinarySHA256='8F30682EE198855440D2A7FE070D5D3653793B2D01BB8C85EEA88F93BBE7C8B9'; Platform='sing-box-check' },
-        [pscustomobject]@{ Name='mosdns-linux-arm64.zip'; Repository='IrineSistiana/mosdns'; Tag='v5.3.4'; SHA256='82d80a1a21606fca0bc6b65ac6f90d30cff6bb4a19a6ab6a246cf247dbb78bc0'; Length=[int64]6591859; Binary='mosdns'; BinarySHA256='5E651992DBEC784DF43E0E483428319B0F2892F5FADFD4E39A1462A5D62CB495'; Platform='mosdns-arm64' },
-        [pscustomobject]@{ Name='mosdns-windows-amd64.zip'; Repository='IrineSistiana/mosdns'; Tag='v5.3.4'; SHA256='3d55b6647e632ad86a1d86e7cf21b96bb63adfde3b4ffdc098c9af79381638ca'; Length=[int64]6245463; Binary='mosdns.exe'; BinarySHA256='C24E2F12DC4EE708E950F511FB543A239B02A75F32EC10ED7477C651C7715A85'; Platform='mosdns-check' }
+        [pscustomobject]@{ Name='sing-box-1.14.4-linux-arm64-musl.tar.gz'; Repository='SagerNet/sing-box'; Tag='v1.14.4'; SHA256='B95E25F921DC5E17A4CF13327243D1177642C7E35425BF5372862C477C359F56'; Length=[int64]29763014; Binary='sing-box-1.14.4-linux-arm64-musl/sing-box'; BinarySHA256='709D6670C49019955E498872BC39B954461517AD8009968D1CF5592E9087B563'; Platform='sing-box-arm64' }
+        if ([IO.Path]::DirectorySeparatorChar -eq [char]'/') {
+            [pscustomobject]@{ Name='sing-box-1.14.4-linux-amd64-musl.tar.gz'; Repository='SagerNet/sing-box'; Tag='v1.14.4'; SHA256='8F7C5F0651238850D96A0E488E5473CD77EC1A0098F63942E943F475A12057CA'; Length=[int64]32555215; Binary='sing-box-1.14.4-linux-amd64-musl/sing-box'; BinarySHA256='FE23D7000AAAA91F40B63641A65A1A84D96B5F179C65B63F34893E238884CD5C'; Platform='sing-box-check' }
+        } else {
+            [pscustomobject]@{ Name='sing-box-1.14.4-windows-amd64.zip'; Repository='SagerNet/sing-box'; Tag='v1.14.4'; SHA256='99185D75D314A07DBBA4A130C8AD986CBEB629A07927975636B341CA61F991DF'; Length=[int64]32891280; Binary='sing-box-1.14.4-windows-amd64/sing-box.exe'; BinarySHA256='8F30682EE198855440D2A7FE070D5D3653793B2D01BB8C85EEA88F93BBE7C8B9'; Platform='sing-box-check' }
+        }
+        [pscustomobject]@{ Name='mosdns-linux-arm64.zip'; Repository='IrineSistiana/mosdns'; Tag='v5.3.4'; SHA256='82d80a1a21606fca0bc6b65ac6f90d30cff6bb4a19a6ab6a246cf247dbb78bc0'; Length=[int64]6591859; Binary='mosdns'; BinarySHA256='5E651992DBEC784DF43E0E483428319B0F2892F5FADFD4E39A1462A5D62CB495'; Platform='mosdns-arm64' }
+        if ([IO.Path]::DirectorySeparatorChar -eq [char]'/') {
+            [pscustomobject]@{ Name='mosdns-linux-amd64.zip'; Repository='IrineSistiana/mosdns'; Tag='v5.3.4'; SHA256='3ABCC73080789EB1CCCA78DAB5049B85AC1E9B8F865AB60158A527B77CD72E85'; Length=[int64]7333579; Binary='mosdns'; BinarySHA256='5357FBB83C89F0A7ACAD275B72C33AA70D4C720CB5590525660132B10CEE8AF9'; Platform='mosdns-check' }
+        } else {
+            [pscustomobject]@{ Name='mosdns-windows-amd64.zip'; Repository='IrineSistiana/mosdns'; Tag='v5.3.4'; SHA256='3d55b6647e632ad86a1d86e7cf21b96bb63adfde3b4ffdc098c9af79381638ca'; Length=[int64]6245463; Binary='mosdns.exe'; BinarySHA256='C24E2F12DC4EE708E950F511FB543A239B02A75F32EC10ED7477C651C7715A85'; Platform='mosdns-check' }
+        }
     )
 }
 
@@ -22,8 +30,8 @@ function Assert-OpenWrtOfficialCheckTools {
     $singBoxAsset=@(Get-OpenWrtOfficialAssets | Where-Object { $_.Platform -ceq 'sing-box-check' })
     $mosdnsAsset=@(Get-OpenWrtOfficialAssets | Where-Object { $_.Platform -ceq 'mosdns-check' })
     if ($singBoxAsset.Count -ne 1 -or $mosdnsAsset.Count -ne 1) { throw 'Official checker asset pins are missing or ambiguous.' }
-    if ((Get-FileHash -LiteralPath $SingBoxPath -Algorithm SHA256).Hash -cne $singBoxAsset[0].BinarySHA256) { throw 'Official Windows sing-box checker digest mismatch.' }
-    if ((Get-FileHash -LiteralPath $MosdnsPath -Algorithm SHA256).Hash -cne $mosdnsAsset[0].BinarySHA256) { throw 'Official Windows mosdns checker digest mismatch.' }
+    if ((Get-FileHash -LiteralPath $SingBoxPath -Algorithm SHA256).Hash -cne $singBoxAsset[0].BinarySHA256) { throw 'Official sing-box checker digest mismatch.' }
+    if ((Get-FileHash -LiteralPath $MosdnsPath -Algorithm SHA256).Hash -cne $mosdnsAsset[0].BinarySHA256) { throw 'Official mosdns checker digest mismatch.' }
 }
 
 function Assert-OpenWrtCorePathHasNoReparseAncestors {
@@ -70,12 +78,12 @@ function ConvertTo-OpenWrtOfficialArchivePath {
 
 function Get-OpenWrtOfficialTreeRecords {
     param([Parameter(Mandatory)][string]$Path)
-    $root=[IO.Path]::GetFullPath($Path).TrimEnd('\')
+    $root=[IO.Path]::GetFullPath($Path).TrimEnd('\','/')
     $files=@(Get-ChildItem -LiteralPath $root -File -Force -Recurse -ErrorAction Stop)
     $records=New-Object 'System.Collections.Generic.List[string]'
     foreach ($file in $files) {
         if ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw ('Reparse file in core tree: '+$file.FullName) }
-        $relative=$file.FullName.Substring($root.Length).TrimStart('\') -replace '\\','/'
+        $relative=$file.FullName.Substring($root.Length).TrimStart('\','/') -replace '\\','/'
         $records.Add(($relative+'|'+[string]$file.Length+'|'+(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash))
     }
     $array=$records.ToArray()
@@ -99,11 +107,11 @@ function Expand-OpenWrtOfficialAsset {
                 $isDirectory=[string]$entry.FullName -like '*/'
                 if ($mode -eq 0xA000 -or ($mode -ne 0 -and $mode -ne 0x8000 -and $mode -ne 0x4000)) { throw ('Non-regular ZIP member rejected: '+$entry.FullName) }
                 if ($isDirectory -or $mode -eq 0x4000) {
-                    $directory=Join-Path $Stage ($relative -replace '/', '\')
+                    $directory=Join-Path $Stage $relative
                     [IO.Directory]::CreateDirectory($directory) | Out-Null
                 }
                 else {
-                    $destination=Join-Path $Stage ($relative -replace '/', '\')
+                    $destination=Join-Path $Stage $relative
                     $parent=Split-Path -Parent $destination
                     [IO.Directory]::CreateDirectory($parent) | Out-Null
                     if ([IO.File]::Exists($destination) -or [IO.Directory]::Exists($destination)) { throw ('Conflicting ZIP destination: '+$destination) }
@@ -124,22 +132,27 @@ function Expand-OpenWrtOfficialAsset {
         finally { $zip.Dispose() }
     }
     else {
-        $members=@(& tar.exe -tzf $Archive)
+        $tar = if ([IO.Path]::DirectorySeparatorChar -eq [char]'/') { 'tar' } else { 'tar.exe' }
+        $members=@(& $tar -tzf $Archive)
         if ($LASTEXITCODE -ne 0 -or $members.Count -eq 0) { throw 'Unable to read approved tar archive member list.' }
-        $verbose=@(& tar.exe -tvzf $Archive)
+        $verbose=@(& $tar -tvzf $Archive)
         if ($LASTEXITCODE -ne 0 -or $verbose.Count -ne $members.Count) { throw 'Unable to verify approved tar archive member types.' }
         for ($i=0; $i -lt $members.Count; $i++) {
             $null=ConvertTo-OpenWrtOfficialArchivePath -EntryPath ([string]$members[$i]) -Asset $Asset
             $line=[string]$verbose[$i]
             if ($line.Length -lt 1 -or ($line[0] -ne '-' -and $line[0] -ne 'd')) { throw ('Non-regular tar member rejected: '+$members[$i]) }
         }
-        & tar.exe -xzf $Archive -C $Stage
+        & $tar -xzf $Archive -C $Stage
         if ($LASTEXITCODE -ne 0) { throw 'Official release extraction failed.' }
     }
     Assert-OpenWrtCoreTreeHasNoReparsePoints -Path $Stage
-    $binary=Join-Path $Stage ([string]$Asset.Binary -replace '/', '\')
+    $binary=Join-Path $Stage ([string]$Asset.Binary)
     if (-not [IO.File]::Exists($binary)) { throw ('Missing official binary in extracted asset: '+$Asset.Binary) }
     if ((Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash -cne [string]$Asset.BinarySHA256) { throw ('Official binary digest mismatch after extraction: '+$Asset.Name) }
+    if ([IO.Path]::DirectorySeparatorChar -eq [char]'/') {
+        & chmod u+x -- $binary
+        if ($LASTEXITCODE -ne 0) { throw ('Cannot make verified binary executable: '+$binary) }
+    }
 }
 
 function Install-OpenWrtBuildCores {
@@ -230,8 +243,8 @@ function Install-OpenWrtBuildCores {
         }
         $installedBinary=Join-Path $platform ([string]$asset.Binary -replace '/', '\')
         if (-not [IO.File]::Exists($installedBinary) -or (Get-FileHash -LiteralPath $installedBinary -Algorithm SHA256).Hash -cne [string]$asset.BinarySHA256) { throw ('Installed official binary verification failed: '+$installedBinary) }
-        $stageFull=[IO.Path]::GetFullPath($stage).TrimEnd('\')
-        $extractFull=[IO.Path]::GetFullPath($ExtractionDirectory).TrimEnd('\')
+        $stageFull=[IO.Path]::GetFullPath($stage).TrimEnd('\','/')
+        $extractFull=[IO.Path]::GetFullPath($ExtractionDirectory).TrimEnd('\','/')
         if (-not $stageFull.StartsWith($extractFull+'\',[StringComparison]::OrdinalIgnoreCase)) { throw ('Extraction cleanup path escapes its task-owned root: '+$stageFull) }
         if ([IO.Directory]::Exists($stageFull)) {
             Assert-OpenWrtCoreTreeHasNoReparsePoints -Path $stageFull

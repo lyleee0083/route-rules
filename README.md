@@ -21,7 +21,7 @@
 
 ## 构建与测试
 
-[客户端工作流](.github/workflows/clients.yml)在 GitHub Actions 下载并校验固定的 sing-box 1.14.4、刷新规则、运行规则与归档测试、生成五平台 ZIP，再解码检查交付的 SRS。推送 `main`、向 `main` 提交 PR 或手动运行均会触发。每次构建的输入 URL 和内容 SHA-256 记录在 `build-info.json`。客户端 CI 验证覆盖规则与配置，实际平台 TUN 和节点连通性由设备验收确认。
+[客户端工作流](.github/workflows/clients.yml)在 GitHub Actions 的 ubuntu-latest 下载并校验固定的 sing-box 1.14.4、刷新规则、运行规则与归档测试、生成五平台 ZIP，再解码检查交付的 SRS。推送 `main`、向 `main` 提交 PR 或手动运行均会触发。每次构建的输入 URL 和内容 SHA-256 记录在 `build-info.json`。客户端 CI 验证覆盖规则与配置，实际平台 TUN 和节点连通性由设备验收确认。
 
 ## 仓库结构
 
