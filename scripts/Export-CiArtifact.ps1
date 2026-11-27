@@ -31,11 +31,11 @@ if ($hash -ine (Get-FileHash -Algorithm SHA256 -LiteralPath $PackagePath).Hash) 
 $orchestration = Get-Content -LiteralPath (Join-Path $root 'routing/routing-sources.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 $report = (Get-Content -LiteralPath (Join-Path $root 'routing/merged/merged-rules.json') -Raw -Encoding UTF8 | ConvertFrom-Json).report
 $inputs = foreach ($source in $orchestration.resources) {
-    $matches = @($report.resources | Where-Object Tag -CEQ $source.tag)
-    if ($matches.Count -ne 1 -or $matches[0].Sha256 -notmatch '^[0-9a-fA-F]{64}$') {
+    $sourceStats = @($report.resources | Where-Object Tag -CEQ $source.tag)
+    if ($sourceStats.Count -ne 1 -or $sourceStats[0].Sha256 -notmatch '^[0-9a-fA-F]{64}$') {
         throw ('Missing build source evidence for '+$source.tag)
     }
-    [ordered]@{ tag = $source.tag; format = $source.format; url = $source.url; sha256 = $matches[0].Sha256.ToLowerInvariant() }
+    [ordered]@{ tag = $source.tag; format = $source.format; url = $source.url; sha256 = $sourceStats[0].Sha256.ToLowerInvariant() }
 }
 $metadata = [ordered]@{
     version = $version
