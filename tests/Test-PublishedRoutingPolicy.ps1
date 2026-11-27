@@ -135,6 +135,6 @@ Write-Output 'DNS/numeric boundary: traffic domain, numeric DNS matcher, reverse
 Write-Output ('Official SRS verification: '+$srsHashes.Count+' positive same-type sets; byte-identical across all profiles; no inverse/exclusion data.')
 } finally {
     $resolved=[IO.Path]::GetFullPath($decompileRoot)
-    if ((Split-Path -Parent $resolved) -ne ([IO.Path]::GetTempPath()).TrimEnd('\') -or (Split-Path -Leaf $resolved) -notlike 'sb-published-direct-*') { throw 'Unsafe published test cleanup.' }
+    if ((Split-Path -Parent $resolved) -ne ([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar) -or (Split-Path -Leaf $resolved) -notlike 'sb-published-direct-*') { throw 'Unsafe published test cleanup.' }
     Remove-Item -LiteralPath $resolved -Recurse -Force
 }

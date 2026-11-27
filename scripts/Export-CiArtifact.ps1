@@ -66,4 +66,4 @@ $checksums = foreach ($file in @($packageName,'build-info.json','THIRD-PARTY.md'
     '{0}  {1}' -f (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $artifactRoot $file)).Hash.ToLowerInvariant(),$file
 }
 [IO.File]::WriteAllText((Join-Path $artifactRoot 'SHA256SUMS.txt'), (($checksums -join "`n") + "`n"), $encoding)
-[IO.File]::AppendAllLines($env:GITHUB_OUTPUT, @("name=$name", "path=$artifactRoot"), $encoding)
+[IO.File]::AppendAllText($env:GITHUB_OUTPUT, "name=$name`npath=$artifactRoot`n", $encoding)
