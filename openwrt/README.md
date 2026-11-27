@@ -34,7 +34,7 @@ sha256sum -c SHA256SUMS
 
 ## 构建与测试
 
-[BE7000 工作流](../.github/workflows/be7000.yml)在 Linux 上运行 Go 控制器与 shell 回归测试，在 Windows 上生成 Linux 客户端快照、派生 mosdns 和 nftables 策略、交叉构建 ARM64 控制器并核对整个 ZIP。CI 还在本机环回中验证 mosdns 行为。真实路由器的启动、nftables 接管与 LAN 转发需另行验收。
+[BE7000 工作流](../.github/workflows/be7000.yml)在 ubuntu-latest 运行 Go 控制器与 shell 回归测试，生成 Linux 客户端快照、派生 mosdns 和 nftables 策略、交叉构建 ARM64 控制器并核对整个 ZIP。CI 还在本机环回中验证 mosdns 行为。真实路由器的启动、nftables 接管与 LAN 转发需另行验收。
 
 ## 仓库结构
 

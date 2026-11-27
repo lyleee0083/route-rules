@@ -11,7 +11,8 @@ if (-not $GoPath) { $GoPath=Join-Path $openWrtRoot 'build-stage/tools/go1.27.1/g
 foreach ($path in @($PackagePath,$MosdnsPath,$GoPath)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw ('Missing isolated DNS test input: '+$path) }
 }
-if ((Get-FileHash -LiteralPath $MosdnsPath -Algorithm SHA256).Hash -cne 'C24E2F12DC4EE708E950F511FB543A239B02A75F32EC10ED7477C651C7715A85') { throw 'Untrusted official mosdns test binary.' }
+$mosdnsAsset = Get-OpenWrtOfficialAssets | Where-Object Platform -CEQ 'mosdns-check'
+if ((Get-FileHash -LiteralPath $MosdnsPath -Algorithm SHA256).Hash -cne $mosdnsAsset.BinarySHA256) { throw 'Untrusted official mosdns test binary.' }
 $names=@('MOSDNS_PACKAGE_ZIP','MOSDNS_CHECK_EXE','GOOS','GOARCH','CGO_ENABLED','GOTOOLCHAIN')
 $old=@{}
 foreach ($name in $names) { $old[$name]=[Environment]::GetEnvironmentVariable($name,'Process') }

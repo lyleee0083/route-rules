@@ -47,7 +47,8 @@ function Test-MosdnsValidationCleanupRejectsReparseTree {
     [IO.Directory]::CreateDirectory($target) | Out-Null
     [IO.File]::WriteAllText($marker,'outside fixture tree',(New-Object Text.UTF8Encoding($false)))
     try {
-        New-Item -ItemType Junction -Path $link -Target $target -ErrorAction Stop | Out-Null
+        $linkType = if ([IO.Path]::DirectorySeparatorChar -eq [char]'/') { 'SymbolicLink' } else { 'Junction' }
+        New-Item -ItemType $linkType -Path $link -Target $target -ErrorAction Stop | Out-Null
         $rejected=$false
         try { Remove-OpenWrtTaskScratchDirectory -Path $fixture -Prefix 'sb-mosdns-reparse-fixture' }
         catch { $rejected=$_.Exception.Message -match 'reparse point' }

@@ -204,7 +204,15 @@ function Assert-MosdnsRuntimeConfiguration {
         $reservations.Clear()
         $stdout=Join-Path $temporary 'stdout.log';$stderr=Join-Path $temporary 'stderr.log'
         $arguments=@('start','-c',('"'+$configPath+'"'),'-d',('"'+$temporary+'"'))
-        $child=Start-Process -FilePath $MosdnsPath -ArgumentList $arguments -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+        $launch = @{
+            FilePath = $MosdnsPath
+            ArgumentList = $arguments
+            RedirectStandardOutput = $stdout
+            RedirectStandardError = $stderr
+            PassThru = $true
+        }
+        if ([IO.Path]::DirectorySeparatorChar -eq [char]'\') { $launch.WindowStyle = 'Hidden' }
+        $child = Start-Process @launch
         $ready=$false
         $apiReady=$false
         while ($true) {

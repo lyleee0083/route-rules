@@ -12,7 +12,7 @@ permissions:
 jobs:
   linux-tests:
     name: Linux controller and shell tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -32,7 +32,7 @@ jobs:
   package:
     name: OpenWrt ARM64 package
     needs: linux-tests
-    runs-on: windows-2025
+    runs-on: ubuntu-latest
     timeout-minutes: 40
     defaults:
       run:
@@ -51,12 +51,11 @@ jobs:
           $null = Install-OpenWrtBuildCores
       - name: Generate the Linux client snapshot
         run: |
-          $zstd = ./scripts/Get-CiZstd.ps1
-          ./scripts/Generate-SingBoxConfig.ps1 -All -RequireSingBox -ZstdLibraryPath $zstd
+          ./scripts/Generate-SingBoxConfig.ps1 -All -RequireSingBox
           ./openwrt/scripts/Sync-FinalLinuxSnapshot.ps1
       - name: Build and verify the BE7000 package
         run: |
-          $go = (Get-Command go.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+          $go = (Get-Command go -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
           ./openwrt/scripts/Build-OpenWrtPackage.ps1 -GoPath $go -ConnectionVerdictCache
           ./openwrt/tests/Test-NftKernelPolicy.ps1
           ./openwrt/tests/Test-ProxyConfiguration.ps1
