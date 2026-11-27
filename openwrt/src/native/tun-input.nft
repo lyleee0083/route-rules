@@ -1,0 +1,2 @@
+# OpenWrt chain-pre/input: mixed-stack internal TCP only, never WAN/LAN listeners.
+iifname "sb-tun" ip saddr 172.28.255.2 ip daddr 172.28.255.1 meta l4proto tcp ct state { new, established } accept comment "sing-box-tun-tcp-input"

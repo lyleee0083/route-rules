@@ -1,0 +1,72 @@
+name: Xiaomi BE7000
+
+on:
+  pull_request:
+    branches: [xiaomi-be7000]
+  push:
+    branches: [xiaomi-be7000]
+
+permissions:
+  contents: read
+
+jobs:
+  linux-tests:
+    name: Linux controller and shell tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.27.1'
+          cache: false
+      - name: Test the controller on Linux
+        working-directory: openwrt/src/controller
+        run: go test -race ./...
+      - name: Test the OpenWrt shell sources
+        working-directory: openwrt/tests/shell
+        run: go test ./...
+
+  package:
+    name: OpenWrt ARM64 package
+    needs: linux-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.27.1'
+          cache: false
+      - name: Install and verify the pinned cores
+        run: |
+          . ./scripts/Official-Cores.ps1
+          $null = Install-OpenWrtBuildCores
+      - name: Generate the Linux client snapshot
+        run: |
+          ./scripts/Generate-SingBoxConfig.ps1 -All -RequireSingBox
+          ./openwrt/scripts/Sync-FinalLinuxSnapshot.ps1
+      - name: Build and verify the BE7000 package
+        run: |
+          $go = (Get-Command go -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+          ./openwrt/scripts/Build-OpenWrtPackage.ps1 -GoPath $go -ConnectionVerdictCache
+          ./openwrt/tests/Test-NftKernelPolicy.ps1
+          ./openwrt/tests/Test-ProxyConfiguration.ps1
+          ./openwrt/tests/Test-OpenWrtPackage.ps1 -ExpectedConnectionCacheMode ctmark-v1
+          ./openwrt/tests/Test-MosdnsBehavior.ps1 -GoPath $go
+      - name: Prepare the versioned artifact
+        id: artifact
+        run: |
+          ./scripts/Export-CiArtifact.ps1 -Component xiaomi-be7000 -PackagePath openwrt/generated/openwrt.zip -BuildManifestPath openwrt/outputs/build/build-manifest.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: ${{ steps.artifact.outputs.path }}
+          if-no-files-found: error

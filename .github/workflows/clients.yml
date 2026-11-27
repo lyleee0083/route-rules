@@ -1,0 +1,47 @@
+name: Clients
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  client-build:
+    name: Client rules and configurations
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Install the pinned sing-box checker
+        run: |
+          . ./scripts/Official-Cores.ps1
+          $null = Install-OpenWrtBuildCores -Platforms sing-box-check
+      - name: Test routing and archive contracts
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./tests/Test-RoutingRuleCompiler.ps1
+          ./tests/Test-SameTypeDirectPolicy.ps1
+          ./tests/Test-ConfigArchive.ps1
+      - name: Generate and verify the five client profiles
+        run: |
+          ./scripts/Generate-SingBoxConfig.ps1 -All -RequireSingBox
+          ./tests/Test-PublishedRoutingPolicy.ps1 -ArchivePath generated/sing-box-configs.zip
+      - name: Prepare the versioned artifact
+        id: artifact
+        run: |
+          ./scripts/Export-CiArtifact.ps1 -Component clients -PackagePath generated/sing-box-configs.zip
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: ${{ steps.artifact.outputs.path }}
+          if-no-files-found: error

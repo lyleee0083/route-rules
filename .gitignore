@@ -1,0 +1,15 @@
+/generated/
+/outputs/
+/backups/
+/work/
+/openwrt/build-stage/
+/openwrt/generated/
+/openwrt/inputs/linux/
+/openwrt/outputs/
+/routing/cache/
+/routing/merged/
+*.build.lock
+*.update.lock
+*.local.json
+__pycache__/
+*.pyc

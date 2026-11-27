@@ -1,0 +1,48 @@
+# Static positive numeric IPv4 policy. IPv6 stays firmware-owned: no project
+# route/rule mutation or global IPv6 reject. Only the LAN-prefix is runtime data.
+# The whole owned table and the two forward exceptions are installed in one transaction.
+table inet sb_proxy {
+    set direct_net {
+        type ipv4_addr; flags interval; auto-merge;
+        __SB_NETWORKS__
+    }
+    set direct_dport {
+        type inet_service; flags interval; auto-merge;
+        __SB_DPORTS__
+    }
+    set direct_sport {
+        type inet_service; flags interval; auto-merge;
+        __SB_SPORTS__
+    }
+    set lan_net {
+        type ipv4_addr; flags interval; auto-merge;
+        elements = { __SB_LAN_PREFIXES__ };
+    }
+    chain direct {
+        ip daddr @direct_net meta mark set (meta mark & 0x9fffffff) | 0x60000000 return
+        meta l4proto { tcp, udp } th dport @direct_dport meta mark set (meta mark & 0x9fffffff) | 0x60000000 return
+        meta l4proto { tcp, udp } th sport @direct_sport meta mark set (meta mark & 0x9fffffff) | 0x60000000 return
+    }
+    chain classify {
+        type filter hook prerouting priority -151; policy accept;
+        iifname != "br-lan" return
+        meta nfproto != ipv4 return
+        meta mark set (meta mark & 0x9fffffff) | 0x40000000
+        fib daddr type { local, broadcast, multicast } return
+        ip daddr @lan_net return
+        ct direction reply return
+        # Re-evaluate originals against current sets: no stale connection verdict
+        # after a policy change. Replies use only the saved original verdict.
+        meta mark set (meta mark & 0x9fffffff) | 0x20000000
+        jump direct
+        meta mark & 0x60000000 == 0x60000000 ct mark set (ct mark & 0x9fffffff) | 0x60000000
+        meta mark & 0x60000000 == 0x20000000 ct mark set (ct mark & 0x9fffffff) | 0x20000000
+    }
+    chain guard {
+        type filter hook forward priority -1; policy accept;
+        iifname "br-lan" oifname "br-lan" ip saddr @lan_net ip daddr @lan_net return
+        iifname "br-lan" oifname != "sb-tun" meta nfproto ipv4 meta mark & 0x40000000 == 0 reject
+        iifname "sb-tun" oifname "br-lan" ct state { established, related } return
+        oifname "br-lan" meta nfproto ipv4 ct direction reply ct original ip saddr @lan_net ct mark & 0x60000000 != 0x60000000 reject
+    }
+}
