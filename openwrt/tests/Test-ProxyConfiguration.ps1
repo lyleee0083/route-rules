@@ -5,7 +5,6 @@ $scriptsRoot=Join-Path $openWrtRoot 'scripts'
 $linuxInputRoot=Join-Path $openWrtRoot 'inputs/linux'
 . (Join-Path $scriptsRoot 'Final-LinuxSnapshot.ps1')
 . (Join-Path $scriptsRoot 'Native-NumericPolicy.ps1')
-. (Join-Path (Join-Path (Split-Path -Parent $openWrtRoot) 'scripts') 'Official-Cores.ps1')
 . (Join-Path $PSScriptRoot 'support\NodeDnsSnapshot.ps1')
 $source=ConvertTo-OpenWrtNodeDnsFixtureConfiguration -Configuration (Read-StrictJsonFile -Path (Join-Path $linuxInputRoot 'sing-box-openwrt.json'))
 if (-not $source.inbounds[0].PSObject.Properties['route_exclude_address_set']) { throw 'Final Linux source must exercise the ordinary Linux direct-IP route-exclusion input.' }

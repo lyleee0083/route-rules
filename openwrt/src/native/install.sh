@@ -6,8 +6,8 @@ umask 077
 cd "$(dirname "$0")"
 package_dir=$(pwd -P)
 [ "$(uname -m)" = aarch64 ]
-for command in fw4 nft ip uci flock ubus jsonfilter sha256sum df du awk stat ln wc; do command -v "$command" >/dev/null; done
-for path in /etc/sing-box /etc/sing-box-state /etc/sing-box-fw3 /etc/sing-box-fw4 /etc/init.d/sing-box /etc/init.d/sb-fw3 /etc/hotplug.d/iface/99-sb-fw3 /usr/bin/sing-box; do
+for command in fw4 nft ip uci flock ubus jsonfilter sha256sum df du awk stat wc; do command -v "$command" >/dev/null; done
+for path in /etc/sing-box /etc/sing-box-state /etc/sing-box-fw3 /etc/sing-box-fw4 /etc/init.d/sing-box /etc/init.d/sb-fw3 /etc/hotplug.d/iface/99-sb-fw3; do
     [ ! -e "$path" ] && [ ! -L "$path" ] || { echo "Existing object requires explicit review: $path" >&2; exit 1; }
 done
 sha256sum -c SHA256SUMS
@@ -18,15 +18,12 @@ case "$cache_mode:$cache_mode_bytes" in
     off-v1:7|ctmark-v1:10) ;;
     *) echo 'Invalid connection cache mode marker; expected exact versioned bytes.' >&2; exit 1;;
 esac
-[ -f mosdns ] && [ ! -L mosdns ]
-[ -f mosdns.yaml ] && [ ! -L mosdns.yaml ]
-[ -f dns-direct-domains.txt ] && [ ! -L dns-direct-domains.txt ]
-[ "$(sha256sum sing-box | cut -d ' ' -f 1)" = 709d6670c49019955e498872bc39b954461517ad8009968d1cf5592e9087b563 ]
-[ "$(sha256sum mosdns | cut -d ' ' -f 1)" = 5e651992dbec784df43e0e483428319b0f2892f5fadfd4e39a1462a5d62cb495 ]
+[ -f mosdns.json ] && [ ! -L mosdns.json ]
+[ -f dns-direct-domains.mdrs ] && [ ! -L dns-direct-domains.mdrs ]
 while read -r digest name; do
     case "$digest" in ''|*[!0-9a-f]*) exit 1;; esac
     [ "${#digest}" = 64 ]
-    case "$name" in ''|.*|*[!A-Za-z0-9_.-]*|SHA256SUMS) exit 1;; esac
+    case "$name" in ''|.*|*[!A-Za-z0-9_.-]*|SHA256SUMS|sing-box|mosdns) exit 1;; esac
     [ -f "$name" ] && [ ! -L "$name" ]
 done < SHA256SUMS
 package_kb=$(du -sk . | awk 'NR==1 {print $1}')
@@ -34,12 +31,13 @@ etc_available_kb=$(df -Pk /etc | awk 'NR==2 {print $4}')
 case "$package_kb:$etc_available_kb" in
     *[!0-9:]*) echo 'Unable to determine writable flash space.' >&2; exit 1;;
 esac
-[ "$etc_available_kb" -ge $((package_kb + 1024)) ] || { echo 'Insufficient writable space for both cores and runtime files under /etc.' >&2; exit 1; }
-[ "$(stat -c '%d' /etc)" = "$(stat -c '%d' /usr/bin)" ] || { echo '/etc and /usr/bin are on different filesystems; refusing a duplicate core copy.' >&2; exit 1; }
-chmod 700 sing-box mosdns sb-controller
+[ "$etc_available_kb" -ge $((package_kb + 1024)) ] || { echo 'Insufficient writable space for runtime files under /etc.' >&2; exit 1; }
+[ -f sb-controller ] && [ ! -L sb-controller ]
+chmod 700 sb-controller
+./sb-controller verify-cores
 # Read-only rejection also covers empty retired nft tables and UCI includes.
 ./sb-controller legacy-check
-./sing-box -D . check -c config.json
+/usr/bin/sing-box -D . check -c config.json
 # Basic installed-tool checks here; full read-only controller preflight runs
 # from the installed path before the separate activation command.
 nft --version >/dev/null
@@ -51,16 +49,12 @@ created_runtime=0
 created_state=0
 init_stage=
 init_identity=
-created_link=0
 created_owner=0
 install_complete=0
 cleanup_install() {
     result=$?
     trap - EXIT HUP INT TERM
     if [ "$install_complete" != 1 ]; then
-        if [ "$created_link" = 1 ] && [ -f /usr/bin/sing-box ] && [ ! -L /usr/bin/sing-box ] && [ "$(stat -c '%d:%i' /usr/bin/sing-box)" = "$(stat -c '%d:%i' /etc/sing-box/sing-box)" ]; then
-            rm -f /usr/bin/sing-box
-        fi
         if [ -n "$init_identity" ] && [ -f /etc/init.d/sing-box ] && [ ! -L /etc/init.d/sing-box ] &&
             [ "$(stat -c '%d:%i' /etc/init.d/sing-box)" = "$init_identity" ] &&
             cmp -s /etc/init.d/sing-box "$package_dir/sing-box.init"; then
@@ -73,7 +67,7 @@ cleanup_install() {
             while read -r digest name; do
                 case "$digest" in ''|*[!0-9a-f]*) echo 'Invalid package digest; partial runtime retained for manual review.' >&2; continue;; esac
                 [ "${#digest}" = 64 ] || { echo 'Invalid package digest; partial runtime retained for manual review.' >&2; continue; }
-                case "$name" in ''|.*|*[!A-Za-z0-9_.-]*|SHA256SUMS) echo 'Invalid package filename; partial runtime retained for manual review.' >&2; continue;; esac
+                case "$name" in ''|.*|*[!A-Za-z0-9_.-]*|SHA256SUMS|sing-box|mosdns) echo 'Invalid package filename; partial runtime retained for manual review.' >&2; continue;; esac
                 path="/etc/sing-box/$name"
                 if [ -f "$path" ] && [ ! -L "$path" ]; then
                     if printf '%s  %s\n' "$digest" "$path" | sha256sum -c - >/dev/null 2>&1; then
@@ -103,19 +97,12 @@ created_runtime=1
 while read -r digest name; do
     case "$digest" in ''|*[!0-9a-f]*) exit 1;; esac
     [ "${#digest}" = 64 ]
-    case "$name" in ''|.*|*[!A-Za-z0-9_.-]*|SHA256SUMS) exit 1;; esac
+    case "$name" in ''|.*|*[!A-Za-z0-9_.-]*|SHA256SUMS|sing-box|mosdns) exit 1;; esac
     [ -f "$name" ] && [ ! -L "$name" ]
     cp "$name" "/etc/sing-box/$name"
 done < SHA256SUMS
 cp SHA256SUMS /etc/sing-box/SHA256SUMS
-chmod 700 /etc/sing-box/sing-box /etc/sing-box/mosdns /etc/sing-box/sb-controller /etc/sing-box/sing-box-service.sh
-if ! ln /etc/sing-box/sing-box /usr/bin/sing-box; then
-    echo 'Unable to create required same-filesystem /usr/bin/sing-box hard link; duplicate copy forbidden.' >&2
-    exit 1
-fi
-created_link=1
-[ -f /usr/bin/sing-box ] && [ ! -L /usr/bin/sing-box ]
-[ "$(stat -c '%d:%i' /usr/bin/sing-box)" = "$(stat -c '%d:%i' /etc/sing-box/sing-box)" ] || { echo '/usr/bin/sing-box is not the required hard link; refusing activation.' >&2; exit 1; }
+chmod 700 /etc/sing-box/sb-controller /etc/sing-box/sing-box-service.sh
 # Prepare the complete executable before publishing the public init path.
 [ ! -e /etc/sing-box/.install-init ] && [ ! -L /etc/sing-box/.install-init ]
 init_stage=/etc/sing-box/.install-init
@@ -131,7 +118,6 @@ printf '%s\n' sing-box-native-v1 > /etc/sing-box-state/owner
 created_owner=1
 cd /etc/sing-box
 sha256sum -c "$package_dir/SHA256SUMS"
-[ "$(stat -c '%d:%i' /usr/bin/sing-box)" = "$(stat -c '%d:%i' /etc/sing-box/sing-box)" ] || { echo 'The /usr/bin alias is not the owned sing-box hard link.' >&2; exit 1; }
 cmp /etc/init.d/sing-box /etc/sing-box/sing-box.init
 payload_sha256=$(sha256sum SHA256SUMS | awk 'NR==1 {print $1}')
 case "$payload_sha256" in ''|*[!0-9a-f]*) echo 'Unable to hash installed payload manifest.' >&2; exit 1;; esac

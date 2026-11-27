@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
     [string]$SingBoxPath,
     [ValidateRange(10,600)][int]$ProducerTimeoutSeconds=180,
@@ -24,10 +24,10 @@ if (-not [IO.Directory]::Exists($SourceRoot) -or -not [IO.File]::Exists($LinuxAr
 . (Join-Path $scriptsRoot 'OpenWrt-Build.ps1')
 . (Join-Path $scriptsRoot 'Native-PackageValidation.ps1')
 . (Join-Path $scriptsRoot 'Final-LinuxSnapshot.ps1')
-. (Join-Path (Join-Path (Split-Path -Parent $openWrtRoot) 'scripts') 'Official-Cores.ps1')
+. (Join-Path (Join-Path (Split-Path -Parent $openWrtRoot) 'scripts') 'Core-Assets.ps1')
 . (Join-Path $scriptsRoot 'Mosdns-Policy.ps1')
 . (Join-Path $scriptsRoot 'OpenWrt-AdapterCache.ps1')
-if (-not $SingBoxPath) { $SingBoxPath=(Get-OpenWrtCorePaths)['sing-box-check'] }
+if (-not $SingBoxPath) { $SingBoxPath=(Join-Path (Join-Path $openWrtRoot 'build-stage/cores') (Get-SingBoxBuildAsset).Name) }
 Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
 $goEnvironment=@{}
 foreach ($name in @('GOPROXY','GOSUMDB','GOTOOLCHAIN')) { $goEnvironment[$name]=[Environment]::GetEnvironmentVariable($name,'Process') }
@@ -494,8 +494,8 @@ try {
     Put-Publication $dummy $shim
     $failed=$false
     try { & (Join-Path $scriptsRoot 'Build-OpenWrtPackage.ps1') -LinuxArchivePath $archive -SourceRoot $snapshot -OutputDirectory $output -Force -SingBoxPath $dummy | Out-Null }
-    catch { $failed=$_.Exception.Message -match 'Official Windows sing-box checker digest mismatch' }
-    Assert-Publication $failed 'Untrusted official-check replacement accepted.'
+    catch { $failed=$_.Exception.Message -match 'Build core digest or length mismatch' }
+    Assert-Publication $failed 'Untrusted build-check replacement accepted.'
     Assert-Publication ((Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash -eq $oldHash) 'Failed check replaced old ZIP.'
     Assert-Publication ((Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash -eq $oldManifestHash) 'Failed check replaced old manifest.'
     Assert-BuildPreservationSnapshot -Directory $output -Snapshot $publishedPreservation -ExpectedRoot $output -SourceState -RequirePackage

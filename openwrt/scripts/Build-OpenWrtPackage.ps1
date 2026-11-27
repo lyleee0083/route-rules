@@ -1,11 +1,9 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
     [string]$LinuxArchivePath,
     [string]$SourceRoot,
     [string]$OutputDirectory,
     [string]$BuildSupportDirectory,
-    [string]$BinaryPath,
-    [string]$MosdnsBinaryPath,
     [string]$MosdnsCheckPath,
     [string]$GoPath,
     [string]$SingBoxPath,
@@ -27,17 +25,17 @@ if ($ConnectionVerdictCache) { $connectionCacheMode='ctmark-v1' }
 if (-not $LinuxArchivePath) { $LinuxArchivePath=Join-Path $projectRoot 'outputs/openwrt-client/sing-box-configs.zip' }
 if (-not $SourceRoot) { $SourceRoot=Join-Path (Join-Path $openWrtRoot 'inputs') 'linux' }
 if (-not $OutputDirectory) { $OutputDirectory=Join-Path $openWrtRoot 'generated' }
-. (Join-Path $sharedScriptsRoot 'Official-Cores.ps1')
-$officialPaths=Get-OpenWrtCorePaths
-if (-not $BinaryPath) { $BinaryPath=$officialPaths['sing-box-arm64'] }
-if (-not $MosdnsBinaryPath) { $MosdnsBinaryPath=$officialPaths['mosdns-arm64'] }
-if (-not $MosdnsCheckPath) { $MosdnsCheckPath=$officialPaths['mosdns-check'] }
-if (-not $SingBoxPath) { $SingBoxPath=$officialPaths['sing-box-check'] }
+. (Join-Path $sharedScriptsRoot 'Core-Assets.ps1')
+. (Join-Path $sharedScriptsRoot 'Json-Validation.ps1')
+. (Join-Path $PSScriptRoot 'Mosdns-Core.ps1')
+$singBoxAsset=Get-SingBoxBuildAsset
+$mosdnsAsset=Get-MosdnsBuildAsset
+$coreRoot=Join-Path $buildStageRoot 'cores'
+if (-not $MosdnsCheckPath) { $MosdnsCheckPath=Join-Path $coreRoot $mosdnsAsset.Name }
+if (-not $SingBoxPath) { $SingBoxPath=Join-Path $coreRoot $singBoxAsset.Name }
 if (-not $GoPath) { $GoPath=(Get-Command go -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source }
-foreach ($path in @($BinaryPath,$MosdnsBinaryPath,$MosdnsCheckPath,$GoPath,$SingBoxPath)) { if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw ('Missing build executable; prepare official assets with Official-Cores.ps1: '+$path) } }
-if ((Get-FileHash -LiteralPath $BinaryPath -Algorithm SHA256).Hash -cne '709D6670C49019955E498872BC39B954461517AD8009968D1CF5592E9087B563') { throw 'Pinned official ARM64 sing-box mismatch.' }
-if ((Get-FileHash -LiteralPath $MosdnsBinaryPath -Algorithm SHA256).Hash -cne '5E651992DBEC784DF43E0E483428319B0F2892F5FADFD4E39A1462A5D62CB495') { throw 'Pinned official ARM64 mosdns mismatch.' }
-Assert-OpenWrtOfficialCheckTools -SingBoxPath $SingBoxPath -MosdnsPath $MosdnsCheckPath
+Assert-BuildCoreAsset -Asset $singBoxAsset -Path $SingBoxPath
+Assert-BuildCoreAsset -Asset $mosdnsAsset -Path $MosdnsCheckPath
 . (Join-Path $PSScriptRoot 'Final-LinuxSnapshot.ps1')
 . (Join-Path $PSScriptRoot 'OpenWrt-Build.ps1')
 . (Join-Path $PSScriptRoot 'OpenWrt-AdapterCache.ps1')
@@ -48,7 +46,7 @@ Assert-OpenWrtOfficialCheckTools -SingBoxPath $SingBoxPath -MosdnsPath $MosdnsCh
 $BuildSupportDirectory=Get-OpenWrtBuildSupportDirectory -OutputDirectory $OutputDirectory -BuildSupportDirectory $BuildSupportDirectory
 $BuildCacheDirectory=Get-OpenWrtAdapterCacheDirectory -BuildSupportDirectory $BuildSupportDirectory
 $controllerSource=Join-Path $sourceTreeRoot 'controller'
-$runtimePaths=@($BinaryPath,$MosdnsBinaryPath,$MosdnsCheckPath,$GoPath)
+$runtimePaths=@($MosdnsCheckPath,$GoPath)
 $protectedSourcePaths=@(
     $PSScriptRoot,$sharedScriptsRoot,$sourceTreeRoot,$buildStageRoot,
     (Join-Path $projectRoot 'scripts'),(Join-Path $projectRoot 'src'),(Join-Path $projectRoot 'config'),
@@ -90,8 +88,7 @@ try {
     $adapterBuild=Build-OpenWrtAdapterOutputs -SourceRoot $SourceRoot -OutputDirectory $payload -SingBoxPath $SingBoxPath -CacheDirectory $BuildCacheDirectory -ConnectionCacheMode $connectionCacheMode -DisableCache:$DisableAdapterCache
     $numeric=$adapterBuild.Numeric
     $dnsPolicy=$adapterBuild.DnsPolicy
-    Copy-Item -LiteralPath $BinaryPath -Destination (Join-Path $payload 'sing-box')
-    Copy-Item -LiteralPath $MosdnsBinaryPath -Destination (Join-Path $payload 'mosdns')
+    Write-MosdnsBinaryDomainSets -Directory $payload -MosdnsPath $MosdnsCheckPath
     [IO.File]::WriteAllText((Join-Path $payload 'connection-cache.mode'),$connectionCacheMode+"`n",$encoding)
     foreach ($name in @('forwarding.nft','tun-input.nft','sing-box-service.sh','sing-box.init','install.sh','activate.sh','rollback.sh')) {
         $text=[IO.File]::ReadAllText((Join-Path $nativeSource $name)).Replace("`r`n","`n").TrimEnd([char]10)+"`n"
@@ -103,7 +100,8 @@ try {
     try {
         [Environment]::SetEnvironmentVariable('GOOS','linux','Process'); [Environment]::SetEnvironmentVariable('GOARCH','arm64','Process')
         [Environment]::SetEnvironmentVariable('CGO_ENABLED','0','Process'); [Environment]::SetEnvironmentVariable('GOTOOLCHAIN','local','Process')
-        & $GoPath build -trimpath -ldflags '-s -w' -o (Join-Path $payload 'sb-controller') .
+        $linkFlags='-s -w -X main.singBoxHash='+$singBoxAsset.SHA256.ToLowerInvariant()+' -X main.mosdnsHash='+$mosdnsAsset.SHA256.ToLowerInvariant()
+        & $GoPath build -trimpath -ldflags $linkFlags -o (Join-Path $payload 'sb-controller') .
         if ($LASTEXITCODE -ne 0) { throw 'ARM64 controller build failed.' }
     } finally {
         Pop-Location
@@ -122,12 +120,10 @@ try {
     Assert-FinalLinuxSnapshot -SourceRoot $SourceRoot -ArchivePath $LinuxArchivePath
     # Persist archive-relative paths, not the transaction directory deleted below.
     $dnsPolicy.paths.dns_direct_domains='dns-direct-domains.txt'
-    $dnsPolicy.paths.mosdns_yaml='mosdns.yaml'
+    $dnsPolicy.paths.mosdns_json='mosdns.json'
     $manifest=[ordered]@{
-        generated_at_utc=[DateTime]::UtcNow.ToString('o');status='local-package-not-deployed';backend='nftables-mosdns';core_version='1.14.4';mosdns_version='5.3.4'
-        core_sha256=(Get-FileHash -LiteralPath $BinaryPath -Algorithm SHA256).Hash
-        mosdns_sha256=(Get-FileHash -LiteralPath $MosdnsBinaryPath -Algorithm SHA256).Hash
-        official_assets=@(Get-OpenWrtOfficialAssets | Select-Object Name,Repository,Tag,SHA256)
+        generated_at_utc=[DateTime]::UtcNow.ToString('o');status='local-package-not-deployed';backend='nftables-mosdns'
+        external_core_assets=@($singBoxAsset,$mosdnsAsset)
         linux_archive_sha256=(Get-FileHash -LiteralPath $LinuxArchivePath -Algorithm SHA256).Hash
         linux_config_sha256=(Get-FileHash -LiteralPath (Join-Path $SourceRoot 'sing-box-openwrt.json') -Algorithm SHA256).Hash
         controller_sha256=(Get-FileHash -LiteralPath (Join-Path $payload 'sb-controller') -Algorithm SHA256).Hash

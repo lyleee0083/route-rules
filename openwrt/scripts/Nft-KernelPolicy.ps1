@@ -133,7 +133,7 @@ function Write-NftAdapterFromSnapshot {
         foreach ($tag in $referencedTags) {
             $decoded = Join-Path $temporary ($tag + '.json')
             & $SingBoxPath rule-set decompile --output $decoded $setsByTag[$tag] | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw 'Official SRS decompile failed.' }
+            if ($LASTEXITCODE -ne 0) { throw 'Pinned sing-box SRS decompile failed.' }
             $sets[$tag] = Read-StrictJsonFile -Path $decoded
         }
         $policy = Get-NumericKernelPolicy -Rules $numericRules -RuleSets $sets

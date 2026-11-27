@@ -218,7 +218,7 @@ function Get-MosdnsAdapterPlanFromSnapshot {
             $decodedPath = Join-Path $temporary ($tag + '.json')
             & $SingBoxPath rule-set decompile --output $decodedPath $sourceSet.Path | Out-Null
             if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $decodedPath -PathType Leaf)) {
-                throw ('Official sing-box failed to decompile direct DNS SRS: ' + $tag)
+                throw ('Pinned sing-box failed to decompile direct DNS SRS: ' + $tag)
             }
             try { $decoded = ConvertFrom-Json -InputObject ([IO.File]::ReadAllText($decodedPath)) -ErrorAction Stop }
             catch { throw ('Cannot parse decompiled direct DNS SRS ' + $tag + ': ' + $_.Exception.Message) }
@@ -254,7 +254,7 @@ function Get-MosdnsAdapterPlanFromSnapshot {
     $domainCount = @($entries | Where-Object { $_.StartsWith('domain:', [StringComparison]::Ordinal) }).Count
     $regexCount = @($entries | Where-Object { $_.StartsWith('regexp:', [StringComparison]::Ordinal) }).Count
     $directLines = $entries.ToArray()
-    $yaml = New-MosdnsCandidateYaml -RejectDomains:($rejectEntries.Count -gt 0)
+    $json = New-MosdnsCandidateJson -RejectDomains:($rejectEntries.Count -gt 0)
     $sourceHashes = @(
         [pscustomobject]@{ path='sing-box-openwrt.json'; sha256=(Get-FileHash -LiteralPath $configPath -Algorithm SHA256).Hash.ToLowerInvariant() }
     ) + @($sourceSetHashes.ToArray())
@@ -269,203 +269,43 @@ function Get-MosdnsAdapterPlanFromSnapshot {
         source_hashes=$sourceHashes
         domain_lines=$directLines
         reject_domain_lines=$rejectEntries.ToArray()
-        candidate_yaml=$yaml
+        candidate_json=$json
         node_ttl_policy='For node A queries only, apply ttl 3600 when the response is NOERROR and contains an IPv4 address. MosDNS ttl operates on the whole positive DNS message, so it also changes CNAME and TTL=0 records in that response; OPT is not rewritten.'
         dns_provider_policy=(Get-MosdnsDnsProviderPolicyMetadata)
     }
 }
 
-function New-MosdnsCandidateYaml {
+function New-MosdnsCandidateJson {
     param([switch]$RejectDomains)
-    $yaml = @'
-log:
-  level: warn
-plugins:
-  - tag: ordinary_cache
-    type: cache
-    args:
-      size: 65472
-      lazy_cache_ttl: 3600
-  - tag: node_cache
-    type: cache
-    args:
-      size: 65472
-      lazy_cache_ttl: 0
-  - tag: direct_domains
-    type: domain_set
-    args:
-      files:
-        - ./dns-direct-domains.txt
-  - tag: direct_ali_forward
-    type: forward
-    args:
-      concurrent: 1
-      upstreams:
-        - tag: ali_direct
-          addr: https://dns.alidns.com/dns-query
-          dial_addr: 223.5.5.5
-          idle_timeout: 120
-          insecure_skip_verify: false
-  - tag: direct_tencent_forward
-    type: forward
-    args:
-      concurrent: 1
-      upstreams:
-        - tag: tencent_direct
-          addr: https://doh.pub/dns-query
-          dial_addr: 120.53.53.53
-          idle_timeout: 120
-          insecure_skip_verify: false
-  - tag: proxy_cloudflare_forward
-    type: forward
-    args:
-      concurrent: 1
-      upstreams:
-        - tag: cloudflare_proxy
-          addr: https://cloudflare-dns.com/dns-query
-          dial_addr: 1.1.1.1
-          idle_timeout: 120
-          socks5: 127.0.0.1:15355
-          insecure_skip_verify: false
-  - tag: proxy_google_forward
-    type: forward
-    args:
-      concurrent: 1
-      upstreams:
-        - tag: google_proxy
-          addr: https://dns.google/dns-query
-          dial_addr: 8.8.8.8
-          idle_timeout: 120
-          socks5: 127.0.0.1:15355
-          insecure_skip_verify: false
-  - tag: direct_ordinary_primary
-    type: sequence
-    args:
-      - exec: metrics_collector direct_ali_primary
-      - exec: $direct_ali_forward
-      - matches:
-          - '!rcode 0'
-          - '!rcode 3'
-        exec: drop_resp
-  - tag: direct_ordinary_backup
-    type: sequence
-    args:
-      - exec: metrics_collector direct_tencent_backup
-      - exec: $direct_tencent_forward
-      - matches:
-          - '!rcode 0'
-          - '!rcode 3'
-        exec: drop_resp
-  - tag: direct_ordinary_fallback
-    type: fallback
-    args:
-      primary: direct_ordinary_primary
-      secondary: direct_ordinary_backup
-      threshold: 300
-      always_standby: false
-  - tag: proxy_ordinary_primary
-    type: sequence
-    args:
-      - exec: metrics_collector proxy_cloudflare_primary
-      - exec: $proxy_cloudflare_forward
-      - matches:
-          - '!rcode 0'
-          - '!rcode 3'
-        exec: drop_resp
-  - tag: proxy_ordinary_backup
-    type: sequence
-    args:
-      - exec: metrics_collector proxy_google_backup
-      - exec: $proxy_google_forward
-      - matches:
-          - '!rcode 0'
-          - '!rcode 3'
-        exec: drop_resp
-  - tag: proxy_ordinary_fallback
-    type: fallback
-    args:
-      primary: proxy_ordinary_primary
-      secondary: proxy_ordinary_backup
-      threshold: 2000
-      always_standby: false
-  - tag: ordinary_sequence
-    type: sequence
-    args:
-      - exec: metrics_collector ordinary_dns
-      - matches:
-          - qtype 28
-        exec: reject 5
-      - exec: $ordinary_cache
-      - matches: has_resp
-        exec: accept
-      - matches:
-          - qname $direct_domains
-        exec: $direct_ordinary_fallback
-      - matches: has_resp
-        exec: accept
-      - exec: $proxy_ordinary_fallback
-  - tag: node_sequence
-    type: sequence
-    args:
-      - exec: metrics_collector node_dns
-      - matches:
-          - qtype 28
-        exec: reject 5
-      - matches:
-          - qtype 1
-        exec: $node_cache
-      - matches: has_resp
-        exec: accept
-      - exec: $direct_ordinary_fallback
-      # ttl is whole-message: positive A responses also get TTL=3600 on CNAME and TTL=0 RRs; OPT is excluded.
-      - matches:
-          - qtype 1
-          - rcode 0
-          - resp_ip 0.0.0.0/0
-        exec: ttl 3600
-      - matches: has_resp
-        exec: accept
-  - tag: ordinary_udp
-    type: udp_server
-    args:
-      entry: ordinary_sequence
-      listen: 127.0.0.1:15353
-  - tag: ordinary_tcp
-    type: tcp_server
-    args:
-      entry: ordinary_sequence
-      listen: 127.0.0.1:15353
-  - tag: node_udp
-    type: udp_server
-    args:
-      entry: node_sequence
-      listen: 127.0.0.1:15354
-  - tag: node_tcp
-    type: tcp_server
-    args:
-      entry: node_sequence
-      listen: 127.0.0.1:15354
-api:
-  http: 127.0.0.1:15357
-'@
-    if ($RejectDomains) {
-        $plugin = @'
-  - tag: reject_domains
-    type: domain_set
-    args:
-      files:
-        - ./dns-reject-domains.txt
-'@
-        $reject = @'
-      - matches:
-          - qname $reject_domains
-        exec: reject 5
-'@
-        $yaml = $yaml.Replace('  - tag: direct_domains', $plugin + "`n" + '  - tag: direct_domains')
-        $anchor = "          - qtype 28`n        exec: reject 5"
-        $yaml = $yaml.Replace($anchor, $anchor + "`n" + $reject)
+    $template=Join-Path (Split-Path -Parent $PSScriptRoot) 'src/native/mosdns-policy.json'
+    if (-not $RejectDomains) { return [IO.File]::ReadAllText($template) }
+    $config=[IO.File]::ReadAllText($template) | ConvertFrom-Json
+    $rejectPlugin=[ordered]@{tag='reject_domains';type='domain_set';args=@{files=@('./dns-reject-domains.mdrs')}}
+    $config.plugins=@($rejectPlugin)+@($config.plugins)
+    foreach ($plugin in $config.plugins) {
+        if ($plugin.tag -cnotin @('ordinary_sequence','node_sequence')) { continue }
+        $rejectRule=[ordered]@{matches=@('qname $reject_domains');exec='reject 5'}
+        $plugin.args=@($plugin.args[0..1])+@($rejectRule)+@($plugin.args[2..($plugin.args.Count-1)])
     }
-    return $yaml
+    return ($config | ConvertTo-Json -Depth 30 -Compress)
+}
+
+function Write-MosdnsBinaryDomainSets {
+    param([Parameter(Mandatory)][string]$Directory,[Parameter(Mandatory)][string]$MosdnsPath)
+    foreach ($stem in @('dns-direct-domains','dns-reject-domains')) {
+        $rulesPath=Join-Path $Directory ($stem+'.txt')
+        if ($stem -ceq 'dns-reject-domains' -and -not [IO.File]::Exists($rulesPath)) { continue }
+        $sourcePath=Join-Path $Directory ('.'+$stem+'-'+[Guid]::NewGuid().ToString('N')+'.json')
+        $rules=@([IO.File]::ReadAllLines($rulesPath) | Where-Object { $_ -ne '' })
+        try {
+            $source=[ordered]@{version=1;type='domain';rules=$rules}
+            [IO.File]::WriteAllText($sourcePath,($source | ConvertTo-Json -Depth 4 -Compress),(New-Object Text.UTF8Encoding($false)))
+            & $MosdnsPath rule-set compile $sourcePath -o (Join-Path $Directory ($stem+'.mdrs'))
+            if ($LASTEXITCODE -ne 0) { throw ('MosDNS rule compilation failed: '+$stem) }
+        } finally {
+            [IO.File]::Delete($sourcePath)
+        }
+    }
 }
 
 function Get-MosdnsPathComparison {
@@ -540,7 +380,7 @@ function Write-MosdnsAdapterFromSnapshot {
         [IO.Directory]::CreateDirectory($destination) | Out-Null
     }
     Assert-MosdnsOutputDirectorySafe -Path $destination
-    $names = @('dns-direct-domains.txt','mosdns.yaml')
+    $names = @('dns-direct-domains.txt','mosdns.json')
     if ($plan.reject_domain_lines.Count) { $names += 'dns-reject-domains.txt' }
     foreach ($name in $names) {
         $destinationFile=Join-Path $destination $name
@@ -559,10 +399,10 @@ function Write-MosdnsAdapterFromSnapshot {
     $secondaryErrors=New-Object 'System.Collections.Generic.List[string]'
     try {
         Assert-MosdnsAdapterStageSafe -Stage $stage -Destination $destination
-        $yamlText = $plan.candidate_yaml.Replace("`r`n","`n").Replace("`r","`n").TrimEnd([char]10)+"`n"
+        $jsonText = $plan.candidate_json.Replace("`r`n","`n").Replace("`r","`n").TrimEnd([char]10)+"`n"
         Write-MosdnsAdapterStageFile -Path (Join-Path $stage $names[0]) -Text (($plan.domain_lines -join "`n")+"`n") -Encoding $encoding
         Assert-MosdnsAdapterStageSafe -Stage $stage -Destination $destination
-        Write-MosdnsAdapterStageFile -Path (Join-Path $stage $names[1]) -Text $yamlText -Encoding $encoding
+        Write-MosdnsAdapterStageFile -Path (Join-Path $stage $names[1]) -Text $jsonText -Encoding $encoding
         if ($plan.reject_domain_lines.Count) {
             Assert-MosdnsAdapterStageSafe -Stage $stage -Destination $destination
             Write-MosdnsAdapterStageFile -Path (Join-Path $stage 'dns-reject-domains.txt') -Text (($plan.reject_domain_lines -join "`n")+"`n") -Encoding $encoding
@@ -635,7 +475,7 @@ function Write-MosdnsAdapterFromSnapshot {
         publication_ready=$plan.publication_ready
         paths=[pscustomobject]@{
             dns_direct_domains=Join-Path $destination $names[0]
-            mosdns_yaml=Join-Path $destination $names[1]
+            mosdns_json=Join-Path $destination $names[1]
         }
         direct_rule_set_count=$plan.direct_rule_set_count
         direct_domain_rule_count=$plan.direct_domain_rule_count

@@ -1,0 +1,304 @@
+{
+  "log": {
+    "level": "warn"
+  },
+  "plugins": [
+    {
+      "tag": "ordinary_cache",
+      "type": "cache",
+      "args": {
+        "size": 65472,
+        "lazy_cache_ttl": 3600
+      }
+    },
+    {
+      "tag": "node_cache",
+      "type": "cache",
+      "args": {
+        "size": 65472,
+        "lazy_cache_ttl": 0
+      }
+    },
+    {
+      "tag": "direct_domains",
+      "type": "domain_set",
+      "args": {
+        "files": [
+          "./dns-direct-domains.mdrs"
+        ]
+      }
+    },
+    {
+      "tag": "direct_ali_forward",
+      "type": "forward",
+      "args": {
+        "concurrent": 1,
+        "upstreams": [
+          {
+            "tag": "ali_direct",
+            "addr": "https://dns.alidns.com/dns-query",
+            "dial_addr": "223.5.5.5",
+            "idle_timeout": 120,
+            "insecure_skip_verify": false
+          }
+        ]
+      }
+    },
+    {
+      "tag": "direct_tencent_forward",
+      "type": "forward",
+      "args": {
+        "concurrent": 1,
+        "upstreams": [
+          {
+            "tag": "tencent_direct",
+            "addr": "https://doh.pub/dns-query",
+            "dial_addr": "120.53.53.53",
+            "idle_timeout": 120,
+            "insecure_skip_verify": false
+          }
+        ]
+      }
+    },
+    {
+      "tag": "proxy_cloudflare_forward",
+      "type": "forward",
+      "args": {
+        "concurrent": 1,
+        "upstreams": [
+          {
+            "tag": "cloudflare_proxy",
+            "addr": "https://cloudflare-dns.com/dns-query",
+            "dial_addr": "1.1.1.1",
+            "idle_timeout": 120,
+            "socks5": "127.0.0.1:15355",
+            "insecure_skip_verify": false
+          }
+        ]
+      }
+    },
+    {
+      "tag": "proxy_google_forward",
+      "type": "forward",
+      "args": {
+        "concurrent": 1,
+        "upstreams": [
+          {
+            "tag": "google_proxy",
+            "addr": "https://dns.google/dns-query",
+            "dial_addr": "8.8.8.8",
+            "idle_timeout": 120,
+            "socks5": "127.0.0.1:15355",
+            "insecure_skip_verify": false
+          }
+        ]
+      }
+    },
+    {
+      "tag": "direct_ordinary_primary",
+      "type": "sequence",
+      "args": [
+        {
+          "exec": "metrics_collector direct_ali_primary"
+        },
+        {
+          "exec": "$direct_ali_forward"
+        },
+        {
+          "matches": [
+            "!rcode 0",
+            "!rcode 3"
+          ],
+          "exec": "drop_resp"
+        }
+      ]
+    },
+    {
+      "tag": "direct_ordinary_backup",
+      "type": "sequence",
+      "args": [
+        {
+          "exec": "metrics_collector direct_tencent_backup"
+        },
+        {
+          "exec": "$direct_tencent_forward"
+        },
+        {
+          "matches": [
+            "!rcode 0",
+            "!rcode 3"
+          ],
+          "exec": "drop_resp"
+        }
+      ]
+    },
+    {
+      "tag": "direct_ordinary_fallback",
+      "type": "fallback",
+      "args": {
+        "primary": "direct_ordinary_primary",
+        "secondary": "direct_ordinary_backup",
+        "threshold": 300,
+        "always_standby": false
+      }
+    },
+    {
+      "tag": "proxy_ordinary_primary",
+      "type": "sequence",
+      "args": [
+        {
+          "exec": "metrics_collector proxy_cloudflare_primary"
+        },
+        {
+          "exec": "$proxy_cloudflare_forward"
+        },
+        {
+          "matches": [
+            "!rcode 0",
+            "!rcode 3"
+          ],
+          "exec": "drop_resp"
+        }
+      ]
+    },
+    {
+      "tag": "proxy_ordinary_backup",
+      "type": "sequence",
+      "args": [
+        {
+          "exec": "metrics_collector proxy_google_backup"
+        },
+        {
+          "exec": "$proxy_google_forward"
+        },
+        {
+          "matches": [
+            "!rcode 0",
+            "!rcode 3"
+          ],
+          "exec": "drop_resp"
+        }
+      ]
+    },
+    {
+      "tag": "proxy_ordinary_fallback",
+      "type": "fallback",
+      "args": {
+        "primary": "proxy_ordinary_primary",
+        "secondary": "proxy_ordinary_backup",
+        "threshold": 2000,
+        "always_standby": false
+      }
+    },
+    {
+      "tag": "ordinary_sequence",
+      "type": "sequence",
+      "args": [
+        {
+          "exec": "metrics_collector ordinary_dns"
+        },
+        {
+          "matches": [
+            "qtype 28"
+          ],
+          "exec": "reject 5"
+        },
+        {
+          "exec": "$ordinary_cache"
+        },
+        {
+          "matches": "has_resp",
+          "exec": "accept"
+        },
+        {
+          "matches": [
+            "qname $direct_domains"
+          ],
+          "exec": "$direct_ordinary_fallback"
+        },
+        {
+          "matches": "has_resp",
+          "exec": "accept"
+        },
+        {
+          "exec": "$proxy_ordinary_fallback"
+        }
+      ]
+    },
+    {
+      "tag": "node_sequence",
+      "type": "sequence",
+      "args": [
+        {
+          "exec": "metrics_collector node_dns"
+        },
+        {
+          "matches": [
+            "qtype 28"
+          ],
+          "exec": "reject 5"
+        },
+        {
+          "matches": [
+            "qtype 1"
+          ],
+          "exec": "$node_cache"
+        },
+        {
+          "matches": "has_resp",
+          "exec": "accept"
+        },
+        {
+          "exec": "$direct_ordinary_fallback"
+        },
+        {
+          "matches": [
+            "qtype 1",
+            "rcode 0",
+            "resp_ip 0.0.0.0/0"
+          ],
+          "exec": "ttl 3600"
+        },
+        {
+          "matches": "has_resp",
+          "exec": "accept"
+        }
+      ]
+    },
+    {
+      "tag": "ordinary_udp",
+      "type": "udp_server",
+      "args": {
+        "entry": "ordinary_sequence",
+        "listen": "127.0.0.1:15353"
+      }
+    },
+    {
+      "tag": "ordinary_tcp",
+      "type": "tcp_server",
+      "args": {
+        "entry": "ordinary_sequence",
+        "listen": "127.0.0.1:15353"
+      }
+    },
+    {
+      "tag": "node_udp",
+      "type": "udp_server",
+      "args": {
+        "entry": "node_sequence",
+        "listen": "127.0.0.1:15354"
+      }
+    },
+    {
+      "tag": "node_tcp",
+      "type": "tcp_server",
+      "args": {
+        "entry": "node_sequence",
+        "listen": "127.0.0.1:15354"
+      }
+    }
+  ],
+  "api": {
+    "http": "127.0.0.1:15357"
+  }
+}

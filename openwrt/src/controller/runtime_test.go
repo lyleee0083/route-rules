@@ -68,8 +68,13 @@ func TestMosDNSDomainSetSyntax(t *testing.T) {
 }
 
 func TestMosDNSBindingContractRequiresLoopbackMetricsAndExactDNSListeners(t *testing.T) {
-	valid := []byte("log:\n  level: warn\nplugins:\n  - tag: ordinary_udp\n    type: udp_server\n    args:\n      listen: 127.0.0.1:15353\n  - tag: ordinary_tcp\n    type: tcp_server\n    args:\n      listen: 127.0.0.1:15353\n  - tag: node_udp\n    type: udp_server\n    args:\n      listen: 127.0.0.1:15354\n  - tag: node_tcp\n    type: tcp_server\n    args:\n      listen: 127.0.0.1:15354\napi:\n  http: 127.0.0.1:15357\n")
-	if err := validateMosdnsBindings(valid); err != nil {
+	valid := []byte(`{"plugins":[
+		{"type":"udp_server","args":{"listen":"127.0.0.1:15353","entry":"ordinary_sequence"}},
+		{"type":"tcp_server","args":{"listen":"127.0.0.1:15353","entry":"ordinary_sequence"}},
+		{"type":"udp_server","args":{"listen":"127.0.0.1:15354","entry":"node_sequence"}},
+		{"type":"tcp_server","args":{"listen":"127.0.0.1:15354","entry":"node_sequence"}}
+	],"api":{"http":"127.0.0.1:15357"}}`)
+	if _, err := readMosdnsConfig(valid); err != nil {
 		t.Fatalf("valid loopback-only MosDNS bindings rejected: %v", err)
 	}
 	invalid := []struct {
@@ -78,16 +83,16 @@ func TestMosDNSBindingContractRequiresLoopbackMetricsAndExactDNSListeners(t *tes
 	}{
 		{name: "wildcard metrics interface", text: strings.Replace(string(valid), "127.0.0.1:15357", "0.0.0.0:15357", 1)},
 		{name: "wrong metrics port", text: strings.Replace(string(valid), "127.0.0.1:15357", "127.0.0.1:15358", 1)},
-		{name: "duplicate API section", text: string(valid) + "api:\n  http: 127.0.0.1:15357\n"},
-		{name: "unknown API option", text: strings.Replace(string(valid), "  http:", "  pprof:", 1)},
-		{name: "duplicate UDP instead of TCP", text: strings.Replace(string(valid), "type: tcp_server", "type: udp_server", 1)},
+		{name: "duplicate API section", text: strings.TrimSuffix(string(valid), "}") + `,"api":{"http":"127.0.0.1:15357"}}`},
+		{name: "unknown API option", text: strings.Replace(string(valid), `"http":`, `"pprof":`, 1)},
+		{name: "duplicate UDP instead of TCP", text: strings.Replace(string(valid), "tcp_server", "udp_server", 1)},
 		{name: "wildcard DNS listener", text: strings.Replace(string(valid), "127.0.0.1:15353", "0.0.0.0:15353", 1)},
 		{name: "extra DNS listener", text: strings.Replace(string(valid), "127.0.0.1:15354", "127.0.0.1:15355", 1)},
-		{name: "missing API", text: strings.Replace(string(valid), "api:\n  http: 127.0.0.1:15357\n", "", 1)},
+		{name: "missing API", text: strings.Replace(string(valid), `,"api":{"http":"127.0.0.1:15357"}`, "", 1)},
 	}
 	for _, test := range invalid {
 		t.Run(test.name, func(t *testing.T) {
-			if err := validateMosdnsBindings([]byte(test.text)); err == nil {
+			if _, err := readMosdnsConfig([]byte(test.text)); err == nil {
 				t.Fatal("invalid MosDNS binding contract was accepted")
 			}
 		})

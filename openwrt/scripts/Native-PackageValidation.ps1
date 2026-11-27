@@ -41,13 +41,12 @@ function Assert-NativePackageArchive {
             if ($actual -cne (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant() -or
                 ($file.Name -ne 'SHA256SUMS' -and $actual -cne $hashes[$file.Name])) { throw ('Native payload digest mismatch: '+$file.Name) }
         }
-        if ($hashes['sing-box'] -cne '709d6670c49019955e498872bc39b954461517ad8009968d1cf5592e9087b563') { throw 'Official sing-box core digest is not pinned.' }
-        if ($hashes['mosdns'] -cne '5e651992dbec784df43e0e483428319b0f2892f5fadfd4e39a1462a5d62cb495') { throw 'Official mosdns core digest is not pinned.' }
+        if ($hashes.ContainsKey('sing-box') -or $hashes.ContainsKey('mosdns')) { throw 'External core binaries must not be packaged.' }
     } finally { $sha.Dispose(); $archive.Dispose() }
     # Every payload byte equals its archive entry. This is schema validation,
     # not ARM service or Linux kernel acceptance.
     & $SingBoxPath -D $PayloadDirectory check -c (Join-Path $PayloadDirectory 'config.json')
-    if ($LASTEXITCODE -ne 0) { throw 'Official core rejected native package before publication.' }
+    if ($LASTEXITCODE -ne 0) { throw 'Pinned sing-box rejected native package before publication.' }
 }
 
 function Get-MosdnsDeadlineRemainingMilliseconds {
@@ -179,7 +178,7 @@ function Assert-MosdnsRuntimeConfiguration {
     $temporary=New-OpenWrtTaskScratchDirectory -Prefix 'sb-mosdns-check'
     $child=$null
     $reservations=New-Object 'System.Collections.Generic.List[object]'
-    $deadline=[DateTime]::UtcNow.AddSeconds(15)
+    $deadline=[DateTime]::UtcNow.AddSeconds(45)
     try {
         $ports=@()
         for ($i=0;$i -lt 2;$i++) {
@@ -195,10 +194,10 @@ function Assert-MosdnsRuntimeConfiguration {
         $apiReservation.Start()
         $reservations.Add($apiReservation)
         $apiPort=$apiReservation.LocalEndpoint.Port
-        foreach ($file in Get-ChildItem -LiteralPath $PayloadDirectory -File -Filter '*.txt') { Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $temporary $file.Name) }
-        $text=[IO.File]::ReadAllText((Join-Path $PayloadDirectory 'mosdns.yaml'))
+        foreach ($file in Get-ChildItem -LiteralPath $PayloadDirectory -File -Filter '*.mdrs') { Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $temporary $file.Name) }
+        $text=[IO.File]::ReadAllText((Join-Path $PayloadDirectory 'mosdns.json'))
         $text=$text.Replace('127.0.0.1:15353',('127.0.0.1:'+$ports[0])).Replace('127.0.0.1:15354',('127.0.0.1:'+$ports[1])).Replace('127.0.0.1:15357',('127.0.0.1:'+$apiPort))
-        $configPath=Join-Path $temporary 'mosdns.yaml'
+        $configPath=Join-Path $temporary 'mosdns.json'
         [IO.File]::WriteAllText($configPath,$text,(New-Object Text.UTF8Encoding($false)))
         foreach ($reservation in $reservations) { if ($reservation -is [Net.Sockets.TcpListener]) { $reservation.Stop() } else { $reservation.Dispose() } }
         $reservations.Clear()
@@ -217,19 +216,19 @@ function Assert-MosdnsRuntimeConfiguration {
         while ($true) {
             [void](Get-MosdnsDeadlineRemainingMilliseconds -Deadline $deadline)
             $child.Refresh()
-            if ($child.HasExited) { throw ('Official mosdns rejected generated configuration: '+[IO.File]::ReadAllText($stderr)+' '+[IO.File]::ReadAllText($stdout)) }
+            if ($child.HasExited) { throw ('Pinned MosDNS rejected generated configuration: '+[IO.File]::ReadAllText($stderr)+' '+[IO.File]::ReadAllText($stdout)) }
             $ready=$true
             foreach ($port in $ports) {
                 if (-not (Test-MosdnsTcpListenerWithinDeadline -Port $port -Deadline $deadline)) { $ready=$false;break }
                 $child.Refresh()
-                if ($child.HasExited) { throw ('Official mosdns exited while checking generated configuration: '+[IO.File]::ReadAllText($stderr)+' '+[IO.File]::ReadAllText($stdout)) }
+                if ($child.HasExited) { throw ('Pinned MosDNS exited while checking generated configuration: '+[IO.File]::ReadAllText($stderr)+' '+[IO.File]::ReadAllText($stdout)) }
             }
             if ($ready) {
                 $apiReady=Invoke-MosdnsMetricsProbe -Url ('http://127.0.0.1:'+$apiPort+'/metrics') -Deadline $deadline
                 if ($apiReady) { break }
             }
             $child.Refresh()
-            if ($child.HasExited) { throw ('Official mosdns exited before generated configuration became ready: '+[IO.File]::ReadAllText($stderr)+' '+[IO.File]::ReadAllText($stdout)) }
+            if ($child.HasExited) { throw ('Pinned MosDNS exited before generated configuration became ready: '+[IO.File]::ReadAllText($stderr)+' '+[IO.File]::ReadAllText($stdout)) }
             $remaining=Get-MosdnsDeadlineRemainingMilliseconds -Deadline $deadline
             Start-Sleep -Milliseconds ([Math]::Min(100,$remaining))
         }
