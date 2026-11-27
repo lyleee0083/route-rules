@@ -1,0 +1,3 @@
+# OpenWrt chain-pre/forward include; only this project's TUN forwarding exceptions.
+iifname "br-lan" oifname "sb-tun" accept comment "sing-box-to-tun"
+iifname "sb-tun" oifname "br-lan" ct state { established, related } accept comment "sing-box-from-tun"
