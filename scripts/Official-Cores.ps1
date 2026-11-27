@@ -241,11 +241,13 @@ function Install-OpenWrtBuildCores {
             }
             [IO.Directory]::Move($sourceTree,$targetTree)
         }
-        $installedBinary=Join-Path $platform ([string]$asset.Binary -replace '/', '\')
+        $installedBinary=Join-Path $platform ([string]$asset.Binary)
         if (-not [IO.File]::Exists($installedBinary) -or (Get-FileHash -LiteralPath $installedBinary -Algorithm SHA256).Hash -cne [string]$asset.BinarySHA256) { throw ('Installed official binary verification failed: '+$installedBinary) }
         $stageFull=[IO.Path]::GetFullPath($stage).TrimEnd('\','/')
         $extractFull=[IO.Path]::GetFullPath($ExtractionDirectory).TrimEnd('\','/')
-        if (-not $stageFull.StartsWith($extractFull+'\',[StringComparison]::OrdinalIgnoreCase)) { throw ('Extraction cleanup path escapes its task-owned root: '+$stageFull) }
+        $separator = [IO.Path]::DirectorySeparatorChar
+        $comparison = if ($separator -eq [char]'/') { [StringComparison]::Ordinal } else { [StringComparison]::OrdinalIgnoreCase }
+        if (-not $stageFull.StartsWith($extractFull+$separator,$comparison)) { throw ('Extraction cleanup path escapes its task-owned root: '+$stageFull) }
         if ([IO.Directory]::Exists($stageFull)) {
             Assert-OpenWrtCoreTreeHasNoReparsePoints -Path $stageFull
             Remove-Item -LiteralPath $stageFull -Recurse -Force
