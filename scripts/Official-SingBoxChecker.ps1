@@ -55,7 +55,7 @@ function Resolve-PinnedSingBoxChecker {
     }
     if (-not $hasPinnedProjectCore) {
         if ($RuntimeFallbackPath -and [IO.File]::Exists($RuntimeFallbackPath)) { return [IO.Path]::GetFullPath($RuntimeFallbackPath) }
-        $command=Get-Command 'sing-box' -CommandType Application -ErrorAction SilentlyContinue
+        $command=Get-Command 'sing-box' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($command) { return [IO.Path]::GetFullPath($command.Source) }
         return $null
     }

@@ -481,7 +481,7 @@ function Invoke-RoutingResourceFetches {
     }
     $fetchRoot = Join-Path $CacheRoot ('.routing-fetch-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $fetchRoot -Force | Out-Null
-    $curlCommand = Get-Command 'curl.exe' -CommandType Application -ErrorAction SilentlyContinue
+    $curlCommand = Get-Command 'curl.exe' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     $curlPath = if ($curlCommand) { $curlCommand.Source } else { '' }
     $worker = {
         param([string]$Url, [string]$DownloadPath, [string]$HeaderPath, [string]$CurlPath, [string]$ETag, [string]$LastModified)
@@ -695,7 +695,7 @@ function Get-RemoteSource {
                 try { $metadata = Read-JsonFile $metadataPath } catch { $metadata = $null }
             }
             $canRequestConditionally = $metadata -and $metadata.url -eq $Resource.url -and (Test-Path -LiteralPath $cachePath -PathType Leaf)
-            $curl = Get-Command 'curl.exe' -CommandType Application -ErrorAction SilentlyContinue
+            $curl = Get-Command 'curl.exe' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($curl) {
                 $arguments = @(
                     '-sS', '-L', '--retry', '3', '--retry-delay', '2', '--max-time', '180',
@@ -867,7 +867,7 @@ function Resolve-ZstdLibrary {
     $candidates.Add('C:\Program Files\Git\mingw64\bin\libzstd.dll')
     $candidates.Add('C:\Program Files (x86)\Git\mingw64\bin\libzstd.dll')
     if ($env:LOCALAPPDATA) { $candidates.Add((Join-Path $env:LOCALAPPDATA 'Programs\Git\mingw64\bin\libzstd.dll')) }
-    $git = Get-Command 'git' -CommandType Application -ErrorAction SilentlyContinue
+    $git = Get-Command 'git' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($git) {
         $gitRoot = [System.IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $git.Source) '..'))
         $candidates.Add((Join-Path $gitRoot 'mingw64\bin\libzstd.dll'))
