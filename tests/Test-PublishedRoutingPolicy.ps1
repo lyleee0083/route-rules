@@ -6,7 +6,7 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 $scriptsRoot = Join-Path $projectRoot 'scripts'
 . (Join-Path $scriptsRoot 'Direct-RoutingPolicy.ps1')
 . (Join-Path $scriptsRoot 'DNS-BootstrapPolicy.ps1')
-. (Join-Path $scriptsRoot 'Official-SingBoxChecker.ps1')
+. (Join-Path $scriptsRoot 'SingBox-Checker.ps1')
 $resolvedSingBox=Resolve-PinnedSingBoxChecker -ProjectRoot $projectRoot -RequestedPath $SingBoxPath
 if (-not $resolvedSingBox) { throw 'A verified project checker or explicit checker is required.' }
 

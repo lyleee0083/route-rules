@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -25,7 +26,6 @@ type responsePlan struct {
 	answer          bool
 	ttl             uint32
 	delay           time.Duration
-	silent          bool
 	wholeMessageTTL bool
 }
 
@@ -33,14 +33,6 @@ type dohAction struct {
 	dns        responsePlan
 	httpStatus int
 	timeout    bool
-}
-
-type upstream struct {
-	conn     *net.UDPConn
-	count    atomic.Int32
-	byNameMu sync.Mutex
-	byName   map[string]int
-	reply    func(string) responsePlan
 }
 
 func successfulAnswer(ttl uint32) responsePlan {
@@ -113,51 +105,6 @@ func makeDNSResponse(request []byte, questionEnd int, plan responsePlan) []byte 
 		response = append(response, answer...)
 	}
 	return response
-}
-
-func startUpstream(t *testing.T, reply func(string) responsePlan) *upstream {
-	t.Helper()
-	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	u := &upstream{conn: conn, byName: make(map[string]int), reply: reply}
-	t.Cleanup(func() { _ = conn.Close() })
-	go func() {
-		buffer := make([]byte, 4096)
-		for {
-			n, addr, readErr := conn.ReadFromUDP(buffer)
-			if readErr != nil {
-				return
-			}
-			request := append([]byte(nil), buffer[:n]...)
-			name, questionEnd, parseErr := parseQuestion(request)
-			if parseErr != nil {
-				continue
-			}
-			u.count.Add(1)
-			u.byNameMu.Lock()
-			u.byName[name]++
-			u.byNameMu.Unlock()
-			plan := u.reply(name)
-			if plan.silent {
-				continue
-			}
-			go func(request []byte, questionEnd int, addr *net.UDPAddr, plan responsePlan) {
-				if plan.delay > 0 {
-					time.Sleep(plan.delay)
-				}
-				_, _ = conn.WriteToUDP(makeDNSResponse(request, questionEnd, plan), addr)
-			}(request, questionEnd, addr, plan)
-		}
-	}()
-	return u
-}
-
-func (u *upstream) requestsFor(name string) int {
-	u.byNameMu.Lock()
-	defer u.byNameMu.Unlock()
-	return u.byName[name]
 }
 
 type dohMock struct {
@@ -256,6 +203,13 @@ func startDoHMock(t *testing.T, plan func(string) dohAction) (*httptest.Server, 
 	return server, mock
 }
 
+func startDoHResponseMock(t *testing.T, reply func(string) responsePlan) (*httptest.Server, *dohMock) {
+	t.Helper()
+	return startDoHMock(t, func(name string) dohAction {
+		return dohAction{dns: reply(name)}
+	})
+}
+
 func startDoHPrimary(t *testing.T) (*httptest.Server, *dohMock) {
 	t.Helper()
 	return startDoHMock(t, func(name string) dohAction {
@@ -287,36 +241,44 @@ func startDoHPrimary(t *testing.T) (*httptest.Server, *dohMock) {
 	})
 }
 
-func replaceForward(t *testing.T, yaml, tag, upstreamTag string, u *upstream) string {
+func policyPlugin(t *testing.T, config map[string]any, tag string) map[string]any {
 	t.Helper()
-	return replaceForwardBlock(t, yaml, tag, fmt.Sprintf("tag: %s\naddr: udp://%s", upstreamTag, u.conn.LocalAddr()))
+	for _, item := range config["plugins"].([]any) {
+		plugin := item.(map[string]any)
+		if plugin["tag"] == tag {
+			return plugin
+		}
+	}
+	t.Fatalf("missing MosDNS plugin %s", tag)
+	return nil
 }
 
-func replaceForwardDoH(t *testing.T, yaml, tag, upstreamTag, address string) string {
+func replaceForward(t *testing.T, config map[string]any, tag, upstreamTag string, server *httptest.Server) {
 	t.Helper()
-	return replaceForwardBlock(t, yaml, tag, fmt.Sprintf("tag: %s\naddr: %s\ninsecure_skip_verify: true", upstreamTag, address))
+	plugin := policyPlugin(t, config, tag)
+	if plugin["type"] != "forward" {
+		t.Fatalf("expected forward plugin %s", tag)
+	}
+	upstream := map[string]any{
+		"tag": upstreamTag, "addr": server.URL + "/dns-query", "insecure_skip_verify": true,
+	}
+	plugin["args"] = map[string]any{"concurrent": 1, "upstreams": []any{upstream}}
 }
 
-func replaceForwardBlock(t *testing.T, yaml, tag, upstreamConfig string) string {
+func compileDomainFixture(t *testing.T, binaryPath, dir, name string, rules []string) {
 	t.Helper()
-	start := strings.Index(yaml, "  - tag: "+tag+"\n")
-	if start < 0 {
-		t.Fatalf("missing forward %s", tag)
+	source, err := json.Marshal(map[string]any{"version": 1, "type": "domain", "rules": rules})
+	if err != nil {
+		t.Fatal(err)
 	}
-	relativeEnd := strings.Index(yaml[start+1:], "\n  - tag: ")
-	if relativeEnd < 0 {
-		t.Fatalf("unterminated forward block %s", tag)
+	input := filepath.Join(dir, name+".json")
+	if err := os.WriteFile(input, source, 0600); err != nil {
+		t.Fatal(err)
 	}
-	end := start + 1 + relativeEnd + 1
-	lines := strings.Split(strings.TrimSpace(upstreamConfig), "\n")
-	if len(lines) < 2 {
-		t.Fatal("invalid local forward fixture")
+	cmd := exec.Command(binaryPath, "rule-set", "compile", input, "-o", filepath.Join(dir, name+".mdrs"))
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("compile local MosDNS fixture: %v: %s", err, output)
 	}
-	replacement := fmt.Sprintf("  - tag: %s\n    type: forward\n    args:\n      concurrent: 1\n      upstreams:\n        - %s\n", tag, strings.TrimSpace(lines[0]))
-	for _, line := range lines[1:] {
-		replacement += "          " + strings.TrimSpace(line) + "\n"
-	}
-	return yaml[:start] + replacement + yaml[end:]
 }
 
 func privatePort(t *testing.T) string {
@@ -535,22 +497,22 @@ func readMetrics(t *testing.T, address string) string {
 	return string(body)
 }
 
-func TestOfficialMosdnsPolicyBehavior(t *testing.T) {
+func TestMosdnsPolicyBehavior(t *testing.T) {
 	binaryPath := os.Getenv("MOSDNS_CHECK_EXE")
 	packagePath := os.Getenv("MOSDNS_PACKAGE_ZIP")
 	if binaryPath == "" || packagePath == "" {
-		t.Skip("set MOSDNS_CHECK_EXE and MOSDNS_PACKAGE_ZIP for isolated official-core acceptance")
+		t.Skip("set MOSDNS_CHECK_EXE and MOSDNS_PACKAGE_ZIP for isolated project-core validation")
 	}
 	archive, err := zip.OpenReader(packagePath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer archive.Close()
-	var yaml string
+	var config map[string]any
 	var rejectData []byte
 	for _, file := range archive.File {
 		switch file.Name {
-		case "mosdns.yaml", "dns-reject-domains.txt":
+		case "mosdns.json", "dns-reject-domains.txt":
 			r, err := file.Open()
 			if err != nil {
 				t.Fatal(err)
@@ -563,8 +525,10 @@ func TestOfficialMosdnsPolicyBehavior(t *testing.T) {
 			if closeErr != nil {
 				t.Fatal(closeErr)
 			}
-			if file.Name == "mosdns.yaml" {
-				yaml = string(data)
+			if file.Name == "mosdns.json" {
+				if err := json.Unmarshal(data, &config); err != nil {
+					t.Fatal(err)
+				}
 			} else {
 				rejectData = data
 			}
@@ -581,22 +545,24 @@ func TestOfficialMosdnsPolicyBehavior(t *testing.T) {
 			}
 		}
 	}
-	hasRejectPolicy := strings.Contains(yaml, "qname $reject_domains")
+	serialized, err := json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hasRejectPolicy := bytes.Contains(serialized, []byte("qname $reject_domains"))
 	if hasRejectPolicy != (len(rejectData) > 0) {
 		t.Fatal("package must provide a nonempty reject list when its DNS policy uses it")
 	}
-	if yaml == "" || !strings.Contains(yaml, "http: 127.0.0.1:15357") {
+	api, ok := config["api"].(map[string]any)
+	if !ok || len(api) != 1 || api["http"] != "127.0.0.1:15357" {
 		t.Fatal("package has no MosDNS policy with the loopback-only metrics API")
-	}
-	if strings.Contains(yaml, "0.0.0.0:15357") || strings.Contains(yaml, "[::]:15357") {
-		t.Fatal("package metrics API is not loopback-only")
 	}
 	ordinaryAddress, nodeAddress, apiAddress := privatePort(t), privatePort(t), privatePort(t)
 	if ordinaryAddress == nodeAddress || ordinaryAddress == apiAddress || nodeAddress == apiAddress {
 		t.Fatal("duplicate isolated DNS or API test ports")
 	}
 	aliHTTP, aliHTTPMock := startDoHPrimary(t)
-	tencent := startUpstream(t, func(name string) responsePlan {
+	tencentServer, tencent := startDoHResponseMock(t, func(name string) responsePlan {
 		switch name {
 		case "slow-primary-backup-error-direct.test", "node-primary-slow-backup-error.test":
 			return responsePlan{rcode: 5}
@@ -606,7 +572,7 @@ func TestOfficialMosdnsPolicyBehavior(t *testing.T) {
 			return successfulAnswer(7)
 		}
 	})
-	cloudflare := startUpstream(t, func(name string) responsePlan {
+	cloudflareServer, cloudflare := startDoHResponseMock(t, func(name string) responsePlan {
 		switch name {
 		case "proxy-both-failed.test":
 			return responsePlan{rcode: 2}
@@ -626,7 +592,7 @@ func TestOfficialMosdnsPolicyBehavior(t *testing.T) {
 			return successfulAnswer(5)
 		}
 	})
-	google := startUpstream(t, func(name string) responsePlan {
+	googleServer, google := startDoHResponseMock(t, func(name string) responsePlan {
 		switch name {
 		case "proxy-slow-backup-error.test":
 			return responsePlan{rcode: 5}
@@ -636,31 +602,51 @@ func TestOfficialMosdnsPolicyBehavior(t *testing.T) {
 			return successfulAnswer(9)
 		}
 	})
-	yaml = replaceForwardDoH(t, yaml, "direct_ali_forward", "ali_direct", aliHTTP.URL+"/dns-query")
-	yaml = replaceForward(t, yaml, "direct_tencent_forward", "tencent_direct", tencent)
-	yaml = replaceForward(t, yaml, "proxy_cloudflare_forward", "cloudflare_proxy", cloudflare)
-	yaml = replaceForward(t, yaml, "proxy_google_forward", "google_proxy", google)
-	yaml = strings.ReplaceAll(yaml, "127.0.0.1:15353", ordinaryAddress)
-	yaml = strings.ReplaceAll(yaml, "127.0.0.1:15354", nodeAddress)
-	yaml = strings.ReplaceAll(yaml, "127.0.0.1:15357", apiAddress)
-	// Only the dedicated expiry QNAME receives a short test-only override. All other
-	// node cases execute the packaged production ttl 3600 action unchanged.
-	ttl3600AcceptBlock := "        exec: ttl 3600\n      - matches: has_resp\n        exec: accept\n  - tag: ordinary_udp"
-	ttlExpiryOverride := "        exec: ttl 3600\n      - matches:\n          - qname node-expired.test\n          - qtype 1\n          - rcode 0\n          - resp_ip 0.0.0.0/0\n        exec: ttl 2\n      - matches: has_resp\n        exec: accept\n  - tag: ordinary_udp"
-	if strings.Count(yaml, ttl3600AcceptBlock) != 1 {
+	replaceForward(t, config, "direct_ali_forward", "ali_direct", aliHTTP)
+	replaceForward(t, config, "direct_tencent_forward", "tencent_direct", tencentServer)
+	replaceForward(t, config, "proxy_cloudflare_forward", "cloudflare_proxy", cloudflareServer)
+	replaceForward(t, config, "proxy_google_forward", "google_proxy", googleServer)
+	for tag, address := range map[string]string{
+		"ordinary_udp": ordinaryAddress, "ordinary_tcp": ordinaryAddress,
+		"node_udp": nodeAddress, "node_tcp": nodeAddress,
+	} {
+		plugin := policyPlugin(t, config, tag)
+		plugin["args"].(map[string]any)["listen"] = address
+	}
+	api["http"] = apiAddress
+	config["log"].(map[string]any)["level"] = "debug"
+	// Only the dedicated expiry QNAME receives a short test-only TTL override.
+	node := policyPlugin(t, config, "node_sequence")
+	var ttlOverrides int
+	var sequence []any
+	for _, step := range node["args"].([]any) {
+		sequence = append(sequence, step)
+		if step.(map[string]any)["exec"] == "ttl 3600" {
+			sequence = append(sequence, map[string]any{
+				"matches": []string{"qname node-expired.test", "qtype 1", "rcode 0", "resp_ip 0.0.0.0/0"},
+				"exec":    "ttl 2",
+			})
+			ttlOverrides++
+		}
+	}
+	if ttlOverrides != 1 {
 		t.Fatal("could not isolate the node-expiry-only short TTL fixture")
 	}
-	yaml = strings.Replace(yaml, ttl3600AcceptBlock, ttlExpiryOverride, 1)
+	node["args"] = sequence
+	fixture, err := json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, external := range []string{"doh.pub", "dns.alidns.com", "dns.google", "cloudflare-dns.com", "120.53.53.53", "223.5.5.5", "8.8.8.8", "1.1.1.1"} {
-		if strings.Contains(yaml, external) {
+		if bytes.Contains(fixture, []byte(external)) {
 			t.Fatalf("fixture config retained an external upstream endpoint: %s", external)
 		}
 	}
-	if strings.Contains(yaml, "socks5:") {
+	if bytes.Contains(fixture, []byte(`"socks5":`)) {
 		t.Fatal("fixture config retained a SOCKS proxy endpoint instead of local mocks")
 	}
 	directory := t.TempDir()
-	if err := os.WriteFile(filepath.Join(directory, "mosdns.yaml"), []byte(yaml), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(directory, "mosdns.json"), fixture, 0600); err != nil {
 		t.Fatal(err)
 	}
 	directDomains := []string{
@@ -681,16 +667,12 @@ func TestOfficialMosdnsPolicyBehavior(t *testing.T) {
 	if hasRejectPolicy {
 		// Include names that would otherwise use both ordinary and node upstreams.
 		directDomains = append(directDomains, "full:blocked-direct.test")
-		rejectData = append(rejectData, []byte("\nfull:blocked-direct.test\ndomain:blocked-suffix.test\n")...)
-		if err := os.WriteFile(filepath.Join(directory, "dns-reject-domains.txt"), rejectData, 0600); err != nil {
-			t.Fatal(err)
-		}
+		rejectDomains := strings.Split(strings.TrimSpace(string(rejectData)), "\n")
+		rejectDomains = append(rejectDomains, "full:blocked-direct.test", "domain:blocked-suffix.test")
+		compileDomainFixture(t, binaryPath, directory, "dns-reject-domains", rejectDomains)
 	}
-	domains := strings.Join(directDomains, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(directory, "dns-direct-domains.txt"), []byte(domains), 0600); err != nil {
-		t.Fatal(err)
-	}
-	command := exec.Command(binaryPath, "start", "-c", "mosdns.yaml", "-d", directory)
+	compileDomainFixture(t, binaryPath, directory, "dns-direct-domains", directDomains)
+	command := exec.Command(binaryPath, "start", "-c", "mosdns.json", "-d", directory)
 	command.Dir = directory
 	var logs bytes.Buffer
 	command.Stdout, command.Stderr = &logs, &logs
@@ -754,12 +736,14 @@ func TestOfficialMosdnsPolicyBehavior(t *testing.T) {
 	if aliHTTPMock.requestsFor("direct-unit.test") != 1 || tencent.requestsFor("direct-unit.test") != 0 || cloudflare.requestsFor("direct-unit.test") != 0 {
 		t.Fatal("normal Ali primary response did not avoid both backup and proxy DNS")
 	}
-	if code, ttl := query(t, ordinaryAddress, "unmatched-unit.test", 1); code != 0 || ttl != 5 {
-		t.Fatal("default Cloudflare response or upstream TTL changed")
+	const unmatched = "unmatched-unit.test"
+	code, ttl, first := queryWithTimeout(t, ordinaryAddress, unmatched, 1, 2*time.Second)
+	if code != 0 || ttl != 5 {
+		t.Fatalf("default Cloudflare response changed: rcode=%d ttl=%d elapsed=%s", code, ttl, first)
 	}
-	query(t, ordinaryAddress, "unmatched-unit.test", 1)
-	if cloudflare.requestsFor("unmatched-unit.test") != 1 || google.requestsFor("unmatched-unit.test") != 0 {
-		t.Fatal("normal Cloudflare primary or ordinary cache selection changed")
+	code, ttl, second := queryWithTimeout(t, ordinaryAddress, unmatched, 1, 2*time.Second)
+	if primary, backup := cloudflare.requestsFor(unmatched), google.requestsFor(unmatched); code != 0 || ttl != 5 || primary != 1 || backup != 0 {
+		t.Fatalf("ordinary cache or provider selection changed: rcode=%d ttl=%d primary=%d backup=%d first=%s second=%s", code, ttl, primary, backup, first, second)
 	}
 	for _, address := range []string{ordinaryAddress, nodeAddress} {
 		assertBlocked(address, "ipv6-unit.test", 28)
@@ -958,5 +942,5 @@ func TestOfficialMosdnsPolicyBehavior(t *testing.T) {
 	if !strings.Contains(metrics, `tag="direct_ali_forward"`) || !strings.Contains(metrics, `tag="direct_tencent_forward"`) || !strings.Contains(metrics, `tag="proxy_cloudflare_forward"`) || !strings.Contains(metrics, `tag="proxy_google_forward"`) || strings.Contains(metrics, `node_ali_forward`) || strings.Contains(metrics, `node_tencent_forward`) {
 		t.Fatal("forward metrics do not identify exactly the shared four ordinary provider plugin tags")
 	}
-	t.Log("official mosdns: node cache misses reuse the shared ordinary Ali/Tencent direct fallback, Cloudflare/Google proxy fallback, local HTTP 429, DNS error RCODES, transport timeout, valid NXDOMAIN/NODATA preservation, slow-primary/backup-error filtering, independent cache/expiry, whole-message TTL/OPT, UDP/TCP node entry, AAAA rejection, and loopback metrics all used local fixtures")
+	t.Log("pinned MosDNS: node cache misses reuse the shared ordinary Ali/Tencent direct fallback, Cloudflare/Google proxy fallback, local HTTP 429, DNS error RCODES, transport timeout, valid NXDOMAIN/NODATA preservation, slow-primary/backup-error filtering, independent cache/expiry, whole-message TTL/OPT, UDP/TCP node entry, AAAA rejection, and loopback metrics all used local fixtures")
 }

@@ -7,8 +7,6 @@ cd /etc/sing-box
 [ -f /etc/sing-box-state/owner ] && [ ! -L /etc/sing-box-state/owner ]
 [ "$(cat /etc/sing-box-state/owner)" = sing-box-native-v1 ]
 cmp /etc/init.d/sing-box /etc/sing-box/sing-box.init
-[ -f /usr/bin/sing-box ] && [ ! -L /usr/bin/sing-box ]
-[ "$(stat -c '%d:%i' /usr/bin/sing-box)" = "$(stat -c '%d:%i' /etc/sing-box/sing-box)" ] || { echo 'The /usr/bin alias is not the owned sing-box hard link.' >&2; exit 1; }
 # This fixed-path, read-only gate must pass before preflight can prepare or
 # activation can enable/start any service or alter owned integration.
 ./sb-controller cache-boot-check

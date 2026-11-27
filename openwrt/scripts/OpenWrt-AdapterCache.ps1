@@ -245,13 +245,14 @@ function Get-OpenWrtAdapterCacheFingerprint {
         (Join-Path $projectRoot 'scripts\Build-Transaction.ps1'),
         (Join-Path $PSScriptRoot 'Build-OpenWrtPackage.ps1'),
         (Join-Path $PSScriptRoot 'Final-LinuxSnapshot.ps1'),
-        (Join-Path (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'scripts') 'Official-Cores.ps1'),
+        (Join-Path (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'scripts') 'Core-Assets.ps1'),
         (Join-Path $PSScriptRoot 'OpenWrt-Build.ps1'),
         (Join-Path $PSScriptRoot 'OpenWrt-AdapterCache.ps1'),
         (Join-Path $PSScriptRoot 'Nft-KernelPolicy.ps1'),
         (Join-Path $PSScriptRoot 'Numeric-KernelPolicy.ps1'),
         (Join-Path $PSScriptRoot 'Native-NumericPolicy.ps1'),
         (Join-Path $PSScriptRoot 'Mosdns-Policy.ps1'),
+        (Join-Path (Split-Path -Parent $PSScriptRoot) 'src/native/mosdns-policy.json'),
         (Join-Path (Join-Path $openWrtRoot 'src\native') 'policy.template.nft')
     )
     $converterFiles = New-Object 'System.Collections.Generic.List[object]'
@@ -295,7 +296,7 @@ function Assert-OpenWrtAdapterCacheTree {
 function Get-OpenWrtAdapterCachePayloadDigest {
     param([Parameter(Mandatory)]$Payload)
     $payloadNames = @('version','fingerprint','files','numeric','dns_policy')
-    $fileNames = @('routing_policy_nft','dns_direct_domains','mosdns_yaml')
+    $fileNames = @('routing_policy_nft','dns_direct_domains','mosdns_json')
     $files = Get-OpenWrtAdapterCacheObjectValue -Object $Payload -Name 'files'
     if ((Get-OpenWrtAdapterCacheObjectPropertyNames -Object $files) -ccontains 'dns_reject_domains') { $fileNames += 'dns_reject_domains' }
     $numericNames = @('numeric_predicates','cidrs','ip_intervals','destination_intervals','source_intervals','decompiled_srs_count')
@@ -368,7 +369,7 @@ function Read-OpenWrtAdapterCache {
     $files = Get-OpenWrtAdapterCacheObjectValue -Object $payload -Name 'files'
     $numeric = Get-OpenWrtAdapterCacheObjectValue -Object $payload -Name 'numeric'
     $dns = Get-OpenWrtAdapterCacheObjectValue -Object $payload -Name 'dns_policy'
-    $fileNames = @('routing_policy_nft','dns_direct_domains','mosdns_yaml')
+    $fileNames = @('routing_policy_nft','dns_direct_domains','mosdns_json')
     if ((Get-OpenWrtAdapterCacheObjectPropertyNames -Object $files) -ccontains 'dns_reject_domains') { $fileNames += 'dns_reject_domains' }
     if (-not (Test-OpenWrtAdapterCacheObjectProperties -Object $files -ExpectedNames $fileNames) -or
         -not (Test-OpenWrtAdapterCacheObjectProperties -Object $numeric -ExpectedNames @('numeric_predicates','cidrs','ip_intervals','destination_intervals','source_intervals','decompiled_srs_count')) -or
@@ -393,7 +394,7 @@ function Read-OpenWrtAdapterCache {
             return [pscustomobject]@{ Hit=$false; Reason='invalid adapter output' }
         }
     }
-    if (($files.mosdns_yaml.Contains('./dns-reject-domains.txt')) -ne ($fileNames -ccontains 'dns_reject_domains')) {
+    if (($files.mosdns_json.Contains('./dns-reject-domains.mdrs')) -ne ($fileNames -ccontains 'dns_reject_domains')) {
         return [pscustomobject]@{ Hit=$false; Reason='incomplete DNS reject payload' }
     }
     $numericNames = @('numeric_predicates','cidrs','ip_intervals','destination_intervals','source_intervals','decompiled_srs_count')
@@ -448,7 +449,7 @@ function New-OpenWrtAdapterCachePayload {
     $files = [ordered]@{
         routing_policy_nft = [IO.File]::ReadAllText((Join-Path $PayloadDirectory 'routing-policy.nft'))
         dns_direct_domains = [IO.File]::ReadAllText((Join-Path $PayloadDirectory 'dns-direct-domains.txt'))
-        mosdns_yaml = [IO.File]::ReadAllText((Join-Path $PayloadDirectory 'mosdns.yaml'))
+        mosdns_json = [IO.File]::ReadAllText((Join-Path $PayloadDirectory 'mosdns.json'))
     }
     $rejectPath = Join-Path $PayloadDirectory 'dns-reject-domains.txt'
     if ([IO.File]::Exists($rejectPath)) { $files['dns_reject_domains'] = [IO.File]::ReadAllText($rejectPath) }
@@ -483,7 +484,7 @@ function New-OpenWrtAdapterCachePayload {
 
 function Restore-OpenWrtAdapterCachePayload {
     param([Parameter(Mandatory)]$Payload,[Parameter(Mandatory)][string]$OutputDirectory)
-    $files = [ordered]@{ 'routing-policy.nft'='routing_policy_nft'; 'dns-direct-domains.txt'='dns_direct_domains'; 'mosdns.yaml'='mosdns_yaml' }
+    $files = [ordered]@{ 'routing-policy.nft'='routing_policy_nft'; 'dns-direct-domains.txt'='dns_direct_domains'; 'mosdns.json'='mosdns_json' }
     if ((Get-OpenWrtAdapterCacheObjectPropertyNames -Object $Payload.files) -ccontains 'dns_reject_domains') {
         $files['dns-reject-domains.txt'] = 'dns_reject_domains'
     }
@@ -517,7 +518,7 @@ function Restore-OpenWrtAdapterCachePayload {
         publication_ready = [bool]$Payload.dns_policy.publication_ready
         paths = [pscustomobject][ordered]@{
             dns_direct_domains = Join-Path $OutputDirectory 'dns-direct-domains.txt'
-            mosdns_yaml = Join-Path $OutputDirectory 'mosdns.yaml'
+            mosdns_json = Join-Path $OutputDirectory 'mosdns.json'
         }
         direct_rule_set_count = [int]$Payload.dns_policy.direct_rule_set_count
         direct_domain_rule_count = [int]$Payload.dns_policy.direct_domain_rule_count

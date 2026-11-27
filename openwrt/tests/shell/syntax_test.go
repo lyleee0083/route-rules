@@ -62,10 +62,10 @@ func TestNativeLockAndRetiredObjectGuards(t *testing.T) {
 	if check < 0 || create < check || !strings.Contains(install, "/etc/sing-box-fw4") {
 		t.Fatal("fresh installation must reject orphaned retired objects before installation")
 	}
-	linkFailure := strings.Index(install, "if ! ln /etc/sing-box/sing-box /usr/bin/sing-box; then")
-	linkSuccess := strings.Index(install, "fi\ncreated_link=1")
-	if linkFailure < 0 || linkSuccess <= linkFailure || strings.Contains(install[linkFailure:linkSuccess], "created_link=1") {
-		t.Fatal("failed hard-link creation must not claim or delete a concurrently created link")
+	coreCheck := strings.Index(install, "./sb-controller verify-cores")
+	if coreCheck < 0 || create < coreCheck || strings.Contains(rollback, "/usr/bin/") ||
+		strings.Count(install, "/usr/bin/") != 1 || !strings.Contains(install, "/usr/bin/sing-box -D . check") {
+		t.Fatal("verify external cores before installation and preserve them during rollback")
 	}
 	if !strings.Contains(install, "package_dir=$(pwd -P)") ||
 		!strings.Contains(install, "done < \"$package_dir/SHA256SUMS\"") ||

@@ -82,7 +82,7 @@ func newFixture(t *testing.T) *fixture {
 	f := &fixture{dns: dnsOptions{Noresolv: &original, Servers: []string{"8.8.8.8", "1.1.1.1"}}, rules: map[string][]any{}, routes: map[string][]any{}, boot: "11111111-1111-1111-1111-111111111111", extraDHCP: "150"}
 	f.nft = map[string]any{"nftables": []any{map[string]any{"metainfo": map[string]any{"json_schema_version": 1}}, map[string]any{"table": map[string]any{"family": "inet", "name": "sb_proxy", "handle": 11}}, map[string]any{"set": map[string]any{"family": "inet", "table": "sb_proxy", "name": "direct_net", "type": "ipv4_addr", "elem": []any{"1.1.1.0/24"}, "handle": 12}}}}
 	f.foreign = map[string]any{"nftables": []any{}}
-	f.c = &controller{root: root, state: state, run: f.run, verify: func() error { return nil }, coreCheck: func() error { return nil }, readyCheck: func(string) (bool, error) { return true, nil }, boot: func() (string, error) { return f.boot, nil }}
+	f.c = &controller{root: root, state: state, coreDir: root, run: f.run, verify: func() error { return nil }, coreCheck: func() error { return nil }, readyCheck: func(string) (bool, error) { return true, nil }, boot: func() (string, error) { return f.boot, nil }}
 	return f
 }
 func (f *fixture) run(input, command string, args ...string) ([]byte, error) {
@@ -987,7 +987,7 @@ func TestCorePIDRequiresMatchingCommandAndLoadedFile(t *testing.T) {
 				pid  string
 				args []string
 			}{
-				{name: "mosdns", pid: "1234", args: []string{"start", "-c", "mosdns.yaml", "-d", f.c.root}},
+				{name: "mosdns", pid: "1234", args: []string{"start", "-c", "mosdns.json", "-d", f.c.root}},
 				{name: "sing-box", pid: "1235", args: []string{"-D", f.c.root, "run", "-c", filepath.Join(f.c.root, "config.json")}},
 			} {
 				proc := filepath.Join(f.c.procRoot, spec.pid)

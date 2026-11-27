@@ -5,7 +5,7 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $scriptsRoot = Join-Path $projectRoot 'scripts'
 . (Join-Path $scriptsRoot 'DNS-BootstrapPolicy.ps1')
-. (Join-Path $scriptsRoot 'Official-SingBoxChecker.ps1')
+. (Join-Path $scriptsRoot 'SingBox-Checker.ps1')
 $SingBoxPath = Resolve-PinnedSingBoxChecker -ProjectRoot $projectRoot -RequestedPath $SingBoxPath
 if (-not $SingBoxPath) { throw 'The pinned sing-box checker is required.' }
 $config = Get-Content -LiteralPath (Join-Path (Join-Path $projectRoot 'config') 'sing-box-core-base.json') -Encoding UTF8 -Raw | ConvertFrom-Json

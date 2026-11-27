@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 $root = Join-Path ([IO.Path]::GetTempPath()) ('sing-box-repair-test-' + [guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($root) | Out-Null
 $scriptsRoot = Join-Path (Split-Path -Parent $PSScriptRoot) 'scripts'
-. (Join-Path $scriptsRoot 'Official-SingBoxChecker.ps1')
+. (Join-Path $scriptsRoot 'SingBox-Checker.ps1')
 $SingBoxPath=Resolve-PinnedSingBoxChecker -ProjectRoot (Split-Path -Parent $PSScriptRoot) -RequestedPath $SingBoxPath
 $updater = Join-Path $scriptsRoot 'Update-RoutingRules.ps1'
 $generator = Join-Path $scriptsRoot 'Generate-SingBoxConfig.ps1'

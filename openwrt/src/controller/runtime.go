@@ -379,102 +379,81 @@ func explicitTrue(value map[string]any, key string) bool {
 }
 
 func (c *controller) validateMosdnsPayload() error {
-	configPath := filepath.Join(c.root, "mosdns.yaml")
+	configPath := filepath.Join(c.root, "mosdns.json")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return err
 	}
-	if err = validateMosdnsBindings(data); err != nil {
+	config, err := readMosdnsConfig(data)
+	if err != nil {
 		return err
 	}
-	if !strings.Contains(string(data), "dns-direct-domains.txt") {
-		return errors.New("mosdns config does not reference dns-direct-domains.txt")
+	var direct, reject bool
+	for _, element := range list(config["plugins"]) {
+		plugin := object(element)
+		if plugin["type"] != "domain_set" {
+			continue
+		}
+		files := list(object(plugin["args"])["files"])
+		if len(files) != 1 {
+			return errors.New("invalid MosDNS domain-set file arguments")
+		}
+		switch {
+		case plugin["tag"] == "direct_domains" && files[0] == "./dns-direct-domains.mdrs":
+			direct = true
+		case plugin["tag"] == "reject_domains" && files[0] == "./dns-reject-domains.mdrs":
+			reject = true
+		default:
+			return errors.New("unexpected MosDNS domain-set file")
+		}
 	}
-	if _, err = c.dnsProbeNames(); err != nil {
+	_, err = os.Lstat(filepath.Join(c.root, rejectDomainFile))
+	if !direct || (!reject && err == nil) || (reject && err != nil) {
+		return errors.New("MosDNS domain-set references do not match the payload")
+	}
+	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	return nil
+	_, err = c.dnsProbeNames()
+	return err
 }
 
-func validateMosdnsBindings(data []byte) error {
-	const ordinary = "127.0.0.1:15353"
-	const node = "127.0.0.1:15354"
-	const metrics = "127.0.0.1:15357"
-	sections := map[string]int{}
-	apiValues := []string{}
-	listenCounts := map[string]int{}
-	serverCounts := map[string]map[string]int{}
-	section := ""
-	pluginType := ""
-	for _, raw := range strings.Split(string(data), "\n") {
-		line := strings.TrimSuffix(raw, "\r")
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-		indent := len(line) - len(strings.TrimLeft(line, " \t"))
-		if indent == 0 {
-			key, value, found := strings.Cut(trimmed, ":")
-			if !found || strings.TrimSpace(value) != "" {
-				section = ""
-				pluginType = ""
-				continue
-			}
-			section = strings.TrimSpace(key)
-			sections[section]++
-			pluginType = ""
-			continue
-		}
-		if section == "api" {
-			if indent != 2 {
-				return errors.New("mosdns api configuration must contain only a single-level http address")
-			}
-			key, value, found := strings.Cut(trimmed, ":")
-			if !found || strings.TrimSpace(key) != "http" {
-				return errors.New("mosdns api configuration contains an unsupported option")
-			}
-			value = strings.TrimSpace(strings.SplitN(value, "#", 2)[0])
-			apiValues = append(apiValues, strings.Trim(value, "\"'"))
-			continue
-		}
-		if section != "plugins" {
-			continue
-		}
-		if indent == 2 && strings.HasPrefix(trimmed, "- ") {
-			pluginType = ""
-			item := strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))
-			if key, value, found := strings.Cut(item, ":"); found && strings.TrimSpace(key) == "type" {
-				pluginType = strings.Trim(strings.TrimSpace(value), "\"'")
-			}
-			continue
-		}
-		if indent == 4 && strings.HasPrefix(trimmed, "type:") {
-			pluginType = strings.Trim(strings.TrimSpace(strings.TrimPrefix(trimmed, "type:")), "\"'")
-			continue
-		}
-		if !strings.HasPrefix(trimmed, "listen:") {
-			continue
-		}
-		if pluginType != "udp_server" && pluginType != "tcp_server" {
-			return errors.New("mosdns may bind DNS only through the expected UDP and TCP server plugins")
-		}
-		address := strings.Trim(strings.TrimSpace(strings.SplitN(strings.TrimPrefix(trimmed, "listen:"), "#", 2)[0]), "\"'")
-		listenCounts[address]++
-		if serverCounts[pluginType] == nil {
-			serverCounts[pluginType] = map[string]int{}
-		}
-		serverCounts[pluginType][address]++
+func readMosdnsConfig(data []byte) (map[string]any, error) {
+	var config map[string]any
+	if err := decodeUniqueStrictJSON(data, &config); err != nil {
+		return nil, err
 	}
-	if sections["api"] != 1 || len(apiValues) != 1 || apiValues[0] != metrics {
-		return errors.New("mosdns metrics API must bind exactly 127.0.0.1:15357")
+	if _, present := config["include"]; present {
+		return nil, errors.New("mosdns configuration must be self-contained")
 	}
-	if listenCounts[ordinary] != 2 || listenCounts[node] != 2 || len(listenCounts) != 2 ||
-		serverCounts["udp_server"][ordinary] != 1 || serverCounts["udp_server"][node] != 1 ||
-		serverCounts["tcp_server"][ordinary] != 1 || serverCounts["tcp_server"][node] != 1 ||
-		len(serverCounts) != 2 {
-		return errors.New("mosdns must bind exactly one UDP and one TCP listener on 127.0.0.1:15353 and :15354")
+	api := object(config["api"])
+	if len(api) != 1 || api["http"] != "127.0.0.1:15357" {
+		return nil, errors.New("mosdns metrics API must bind exactly 127.0.0.1:15357")
 	}
-	return nil
+	expected := map[string]string{
+		"udp_server/127.0.0.1:15353": "ordinary_sequence",
+		"tcp_server/127.0.0.1:15353": "ordinary_sequence",
+		"udp_server/127.0.0.1:15354": "node_sequence",
+		"tcp_server/127.0.0.1:15354": "node_sequence",
+	}
+	for _, element := range list(config["plugins"]) {
+		plugin := object(element)
+		args := object(plugin["args"])
+		kind, _ := plugin["type"].(string)
+		listen, _ := args["listen"].(string)
+		if !strings.HasSuffix(kind, "_server") && listen == "" {
+			continue
+		}
+		key := kind + "/" + listen
+		if entry, ok := expected[key]; !ok || args["entry"] != entry {
+			return nil, errors.New("unexpected or duplicate MosDNS DNS listener")
+		}
+		delete(expected, key)
+	}
+	if len(expected) != 0 {
+		return nil, errors.New("mosdns must bind one UDP and one TCP listener on each expected loopback address")
+	}
+	return config, nil
 }
 
 func validateCapturePolicy(policy string) error {
@@ -1117,9 +1096,9 @@ func (c *controller) startCore(name string) (*managedChild, error) {
 	var command *exec.Cmd
 	switch name {
 	case "mosdns":
-		command = exec.Command(filepath.Join(c.root, "mosdns"), "start", "-c", "mosdns.yaml", "-d", c.root)
+		command = exec.Command(c.corePath("mosdns"), "start", "-c", "mosdns.json", "-d", c.root)
 	case "sing-box":
-		command = exec.Command(filepath.Join(c.root, "sing-box"), "-D", c.root, "run", "-c", filepath.Join(c.root, "config.json"))
+		command = exec.Command(c.corePath("sing-box"), "-D", c.root, "run", "-c", filepath.Join(c.root, "config.json"))
 	default:
 		return nil, errors.New("unknown core")
 	}
@@ -1229,9 +1208,9 @@ func (c *controller) lifecycleReady(stage string) (bool, error) {
 			return c.processCheck(name)
 		}
 		if name == "mosdns" {
-			return c.processRunning(name, filepath.Join(c.root, "mosdns"), []string{"start", "-c", "mosdns.yaml", "-d", c.root})
+			return c.processRunning(name, c.corePath("mosdns"), []string{"start", "-c", "mosdns.json", "-d", c.root})
 		}
-		return c.processRunning(name, filepath.Join(c.root, "sing-box"), []string{"-D", c.root, "run", "-c", filepath.Join(c.root, "config.json")})
+		return c.processRunning(name, c.corePath("sing-box"), []string{"-D", c.root, "run", "-c", filepath.Join(c.root, "config.json")})
 	}
 	probeDNS := func(port int, name, network string) error {
 		if c.dnsProbe != nil {
@@ -1422,7 +1401,7 @@ func (c *controller) startLifecycle(ctx context.Context) (cleanupComplete bool, 
 		return false, err
 	}
 	if err = c.withCommandContext(ctx, func() error {
-		_, checkErr := c.runCommand("", filepath.Join(c.root, "sing-box"), "-D", c.root, "check", "-c", filepath.Join(c.root, "config.json"))
+		_, checkErr := c.runCommand("", c.corePath("sing-box"), "-D", c.root, "check", "-c", filepath.Join(c.root, "config.json"))
 		return checkErr
 	}); err != nil {
 		return cleanupComplete, fmt.Errorf("sing-box configuration check: %w", err)

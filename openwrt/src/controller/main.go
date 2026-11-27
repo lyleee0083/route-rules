@@ -24,8 +24,8 @@ import (
 )
 
 const reserved uint32 = 0x60000000
-const singBoxHash = "709d6670c49019955e498872bc39b954461517ad8009968d1cf5592e9087b563"
-const mosdnsHash = "5e651992dbec784df43e0e483428319b0f2892f5fadfd4e39a1462a5d62cb495"
+var singBoxHash string
+var mosdnsHash string
 const includeSection = "firewall.sb_proxy_forward"
 const inputIncludeSection = "firewall.sb_proxy_input"
 
@@ -81,6 +81,7 @@ type journal struct {
 }
 type controller struct {
 	root, state              string
+	coreDir                  string
 	run                      runner
 	domainProbes             domainProbeCache
 	boot                     func() (string, error)
@@ -293,6 +294,9 @@ func (c *controller) verified() error {
 	if c.verify != nil {
 		return c.verify()
 	}
+	if err := c.verifyExternalCores(); err != nil {
+		return err
+	}
 	return c.verifyPayload()
 }
 
@@ -300,10 +304,10 @@ func (c *controller) coreRunning() error {
 	if c.coreCheck != nil {
 		return c.coreCheck()
 	}
-	if err := c.processRunning("mosdns", filepath.Join(c.root, "mosdns"), []string{"start", "-c", "mosdns.yaml", "-d", c.root}); err != nil {
+	if err := c.processRunning("mosdns", c.corePath("mosdns"), []string{"start", "-c", "mosdns.json", "-d", c.root}); err != nil {
 		return fmt.Errorf("mosdns process identity: %w", err)
 	}
-	return c.processRunning("sing-box", filepath.Join(c.root, "sing-box"), []string{"-D", c.root, "run", "-c", filepath.Join(c.root, "config.json")})
+	return c.processRunning("sing-box", c.corePath("sing-box"), []string{"-D", c.root, "run", "-c", filepath.Join(c.root, "config.json")})
 }
 
 func (c *controller) processRunning(name, binary string, args []string) error {
@@ -451,6 +455,32 @@ func hashRegularFile(path string, buffer []byte) ([32]byte, error) {
 	})
 }
 
+func (c *controller) corePath(name string) string {
+	dir := c.coreDir
+	if dir == "" {
+		dir = "/usr/bin"
+	}
+	return filepath.Join(dir, name)
+}
+
+func (c *controller) verifyExternalCores() error {
+	buffer := make([]byte, payloadHashBufferSize)
+	for _, core := range []struct{ name, sha string }{{"sing-box", singBoxHash}, {"mosdns", mosdnsHash}} {
+		path := c.corePath(core.name)
+		digest, err := hashRegularFile(path, buffer)
+		if err != nil {
+			return fmt.Errorf("check external core %s: %w", path, err)
+		}
+		if hex.EncodeToString(digest[:]) != core.sha {
+			return fmt.Errorf("external core %s does not match the pinned project Release", path)
+		}
+		if info, err := os.Stat(path); err != nil || info.Mode().Perm()&0100 == 0 {
+			return fmt.Errorf("external core %s must be executable", path)
+		}
+	}
+	return nil
+}
+
 func (c *controller) verifyPayload() error {
 	if err := directory(c.root); err != nil {
 		return err
@@ -467,7 +497,7 @@ func (c *controller) verifyPayload() error {
 	hashBuffer := make([]byte, payloadHashBufferSize)
 	for _, line := range strings.Split(strings.TrimSuffix(string(data), "\n"), "\n") {
 		parts := strings.Split(line, "  ")
-		if len(parts) != 2 || !regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(parts[0]) || !regexp.MustCompile(`^[A-Za-z0-9_.-]+$`).MatchString(parts[1]) || parts[1] == "SHA256SUMS" || found[parts[1]] {
+		if len(parts) != 2 || !regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(parts[0]) || !regexp.MustCompile(`^[A-Za-z0-9_.-]+$`).MatchString(parts[1]) || parts[1] == "SHA256SUMS" || parts[1] == "sing-box" || parts[1] == "mosdns" || found[parts[1]] {
 			return errors.New("invalid payload manifest")
 		}
 		found[parts[1]] = true
@@ -479,24 +509,21 @@ func (c *controller) verifyPayload() error {
 		if hex.EncodeToString(digest[:]) != parts[0] {
 			return fmt.Errorf("payload changed: %s", parts[1])
 		}
-		if parts[1] == "sing-box" && parts[0] != singBoxHash {
-			return errors.New("sing-box is not the pinned official ARM64 stable binary")
-		}
-		if parts[1] == "mosdns" && parts[0] != mosdnsHash {
-			return errors.New("mosdns is not the pinned official ARM64 stable binary")
-		}
 	}
-	for _, name := range []string{"sing-box", "mosdns", "config.json", "mosdns.yaml", "dns-direct-domains.txt", "routing-policy.nft", "forwarding.nft", "tun-input.nft", "sb-controller", "sing-box-service.sh", "sing-box.init"} {
+	for _, name := range []string{"config.json", "mosdns.json", "dns-direct-domains.txt", "dns-direct-domains.mdrs", "routing-policy.nft", "forwarding.nft", "tun-input.nft", "sb-controller", "sing-box-service.sh", "sing-box.init"} {
 		if !found[name] {
 			return fmt.Errorf("required payload missing: %s", name)
 		}
 	}
-	if _, rejectErr := os.Lstat(filepath.Join(c.root, "dns-reject-domains.txt")); rejectErr == nil {
-		if !found["dns-reject-domains.txt"] {
-			return errors.New("DNS reject rules are not covered by SHA256SUMS")
+	if found["dns-reject-domains.txt"] != found["dns-reject-domains.mdrs"] {
+		return errors.New("DNS reject policy requires both its probe rules and compiled rules")
+	}
+	for _, name := range []string{"dns-reject-domains.txt", "dns-reject-domains.mdrs"} {
+		if _, err := os.Lstat(filepath.Join(c.root, name)); err == nil && !found[name] {
+			return fmt.Errorf("DNS reject rules are not covered by SHA256SUMS: %s", name)
+		} else if err != nil && !os.IsNotExist(err) {
+			return err
 		}
-	} else if !os.IsNotExist(rejectErr) {
-		return rejectErr
 	}
 	modePath := filepath.Join(c.root, cacheModeFile)
 	if _, modeErr := os.Lstat(modePath); modeErr == nil {
@@ -2220,7 +2247,7 @@ func publishInstallInit(root, destination string) error {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "Usage: sb-controller legacy-check|publish-install-init|preflight|prepare|apply|inspect|stop|supervise|service-start|service-status|service-rollback|cache-boot-check|stage-cache-receipt|cache-rollback-clean")
+		fmt.Fprintln(os.Stderr, "Usage: sb-controller verify-cores|legacy-check|publish-install-init|preflight|prepare|apply|inspect|stop|supervise|service-start|service-status|service-rollback|cache-boot-check|stage-cache-receipt|cache-rollback-clean")
 		os.Exit(2)
 	}
 	action := os.Args[1]
@@ -2235,6 +2262,8 @@ func main() {
 		err = errors.New("this controller action does not accept arguments")
 	} else {
 		switch action {
+		case "verify-cores":
+			err = c.verifyExternalCores()
 		case "legacy-check":
 			err = c.rejectLegacyIntegration()
 		case "publish-install-init":

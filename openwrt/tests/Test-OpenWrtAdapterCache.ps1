@@ -3,12 +3,12 @@ param([string]$SingBoxPath)
 Set-StrictMode -Version 2.0
 $ErrorActionPreference='Stop'
 $openWrtRoot=Split-Path -Parent $PSScriptRoot
-. (Join-Path (Join-Path (Split-Path -Parent $openWrtRoot) 'scripts') 'Official-Cores.ps1')
+. (Join-Path (Join-Path (Split-Path -Parent $openWrtRoot) 'scripts') 'Core-Assets.ps1')
 . (Join-Path (Join-Path $openWrtRoot 'scripts') 'OpenWrt-Build.ps1')
 . (Join-Path (Join-Path $openWrtRoot 'scripts') 'OpenWrt-AdapterCache.ps1')
 . (Join-Path (Join-Path $openWrtRoot 'scripts') 'Mosdns-Policy.ps1')
-if (-not $SingBoxPath) { $SingBoxPath=(Get-OpenWrtCorePaths)['sing-box-check'] }
-if (-not (Test-Path -LiteralPath $SingBoxPath -PathType Leaf)) { throw 'Official sing-box cache fingerprint dependency is missing.' }
+if (-not $SingBoxPath) { $SingBoxPath=(Join-Path (Join-Path $openWrtRoot 'build-stage/cores') (Get-SingBoxBuildAsset).Name) }
+if (-not (Test-Path -LiteralPath $SingBoxPath -PathType Leaf)) { throw 'Project sing-box cache fingerprint dependency is missing.' }
 if ([string]::IsNullOrWhiteSpace($env:TEMP)) { throw 'TEMP must point to the current task temporary directory.' }
 $fixtureRoot=Join-Path ([IO.Path]::GetFullPath($env:TEMP)) ('owpc-'+[guid]::NewGuid().ToString('N'))
 $resolvedRoot=[IO.Path]::GetFullPath($fixtureRoot)
@@ -89,7 +89,7 @@ try {
     $cachePayload=[ordered]@{
         version=2
         fingerprint=$fingerprintTwo
-        files=[ordered]@{routing_policy_nft="nft-set`n";dns_direct_domains="full:example.test`n";mosdns_yaml="plugins:`n"}
+        files=[ordered]@{routing_policy_nft="nft-set`n";dns_direct_domains="full:example.test`n";mosdns_json="plugins:`n"}
         numeric=[ordered]@{numeric_predicates=1;cidrs=1;ip_intervals=1;destination_intervals=1;source_intervals=1;decompiled_srs_count=1}
         dns_policy=[ordered]@{
             status='written';publication_ready=$true;direct_rule_set_count=1;direct_domain_rule_count=1
@@ -106,10 +106,10 @@ try {
     [IO.Directory]::CreateDirectory($coldOutput) | Out-Null
     [IO.File]::WriteAllText((Join-Path $coldOutput 'routing-policy.nft'),$cachePayload.files.routing_policy_nft,(New-Object Text.UTF8Encoding($false)))
     [IO.File]::WriteAllText((Join-Path $coldOutput 'dns-direct-domains.txt'),$cachePayload.files.dns_direct_domains,(New-Object Text.UTF8Encoding($false)))
-    [IO.File]::WriteAllText((Join-Path $coldOutput 'mosdns.yaml'),$cachePayload.files.mosdns_yaml,(New-Object Text.UTF8Encoding($false)))
+    [IO.File]::WriteAllText((Join-Path $coldOutput 'mosdns.json'),$cachePayload.files.mosdns_json,(New-Object Text.UTF8Encoding($false)))
     $coldDnsPolicy=[pscustomobject][ordered]@{
         status='written';publication_ready=$true
-        paths=[pscustomobject][ordered]@{dns_direct_domains=(Join-Path $coldOutput 'dns-direct-domains.txt');mosdns_yaml=(Join-Path $coldOutput 'mosdns.yaml')}
+        paths=[pscustomobject][ordered]@{dns_direct_domains=(Join-Path $coldOutput 'dns-direct-domains.txt');mosdns_json=(Join-Path $coldOutput 'mosdns.json')}
         direct_rule_set_count=1;direct_domain_rule_count=1;full_count=1;domain_count=0;regexp_count=0
         node_ttl_policy='isolated test metadata'
         dns_provider_policy=$providerPolicy
@@ -129,7 +129,7 @@ try {
     Assert-CacheTest (($coldPropertyNames -join "`n") -ceq ($warmPropertyNames -join "`n")) 'Warm DNS policy metadata omitted or reordered a cold-writer field.'
     foreach ($propertyName in $coldPropertyNames) {
         if ($propertyName -ceq 'paths') {
-            Assert-CacheTest ($warm.DnsPolicy.paths.dns_direct_domains -ceq (Join-Path $warmOutput 'dns-direct-domains.txt') -and $warm.DnsPolicy.paths.mosdns_yaml -ceq (Join-Path $warmOutput 'mosdns.yaml')) 'Warm DNS policy paths do not point to restored outputs.'
+            Assert-CacheTest ($warm.DnsPolicy.paths.dns_direct_domains -ceq (Join-Path $warmOutput 'dns-direct-domains.txt') -and $warm.DnsPolicy.paths.mosdns_json -ceq (Join-Path $warmOutput 'mosdns.json')) 'Warm DNS policy paths do not point to restored outputs.'
         } else {
             $coldValueJson=ConvertTo-Json -InputObject $coldDnsPolicy.PSObject.Properties[$propertyName].Value -Depth 100 -Compress
             $warmValueJson=ConvertTo-Json -InputObject $warm.DnsPolicy.PSObject.Properties[$propertyName].Value -Depth 100 -Compress

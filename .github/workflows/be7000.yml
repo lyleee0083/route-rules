@@ -45,10 +45,19 @@ jobs:
         with:
           go-version: '1.27.1'
           cache: false
-      - name: Install and verify the pinned cores
+      - name: Enable ARM64 execution on Ubuntu
+        shell: bash
         run: |
-          . ./scripts/Official-Cores.ps1
-          $null = Install-OpenWrtBuildCores
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-binfmt
+          sudo systemctl restart systemd-binfmt
+          test -f /proc/sys/fs/binfmt_misc/qemu-aarch64
+      - name: Install and verify the pinned project cores
+        run: |
+          . ./scripts/Core-Assets.ps1
+          . ./openwrt/scripts/Mosdns-Core.ps1
+          $null = Install-BuildCoreAsset -Asset (Get-SingBoxBuildAsset)
+          $null = Install-BuildCoreAsset -Asset (Get-MosdnsBuildAsset)
       - name: Generate the Linux client snapshot
         run: |
           ./scripts/Generate-SingBoxConfig.ps1 -Client linux -OutputDirectory outputs/openwrt-client -RequireSingBox

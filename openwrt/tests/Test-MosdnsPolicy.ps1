@@ -11,10 +11,13 @@ $projectRoot=Split-Path -Parent $openWrtRoot
 $scriptsRoot=Join-Path $openWrtRoot 'scripts'
 $linuxInputRoot=Join-Path $openWrtRoot 'inputs/linux'
 if (-not $SourceRoot) { $SourceRoot = $linuxInputRoot }
-. (Join-Path (Join-Path (Split-Path -Parent $openWrtRoot) 'scripts') 'Official-Cores.ps1')
-if (-not $SingBoxPath) { $SingBoxPath=(Get-OpenWrtCorePaths)['sing-box-check'] }
-if (-not $MosdnsPath) { $MosdnsPath = Join-Path $openWrtRoot 'build-stage/cores/mosdns-check/mosdns.exe' }
-Assert-OpenWrtOfficialCheckTools -SingBoxPath $SingBoxPath -MosdnsPath $MosdnsPath
+. (Join-Path (Join-Path (Split-Path -Parent $openWrtRoot) 'scripts') 'Core-Assets.ps1')
+. (Join-Path (Join-Path (Split-Path -Parent $openWrtRoot) 'scripts') 'Json-Validation.ps1')
+. (Join-Path (Join-Path $openWrtRoot 'scripts') 'Mosdns-Core.ps1')
+if (-not $SingBoxPath) { $SingBoxPath=(Join-Path (Join-Path $openWrtRoot 'build-stage/cores') (Get-SingBoxBuildAsset).Name) }
+if (-not $MosdnsPath) { $MosdnsPath = Join-Path (Join-Path $openWrtRoot 'build-stage/cores') (Get-MosdnsBuildAsset).Name }
+Assert-BuildCoreAsset -Asset (Get-SingBoxBuildAsset) -Path $SingBoxPath
+Assert-BuildCoreAsset -Asset (Get-MosdnsBuildAsset) -Path $MosdnsPath
 . (Join-Path (Join-Path $projectRoot 'scripts') 'Direct-RoutingPolicy.ps1')
 . (Join-Path $scriptsRoot 'Mosdns-Policy.ps1')
 . (Join-Path $scriptsRoot 'Native-PackageValidation.ps1')
@@ -333,7 +336,7 @@ function Test-MosdnsWriterSafetyFixtures {
         finally { Set-Item -Path Function:\Move-MosdnsAdapterStageFile -Value $originalMoveFunction }
         Assert-MosdnsTest $raceRejected 'Writer did not report the second-file publication conflict.'
         Assert-MosdnsTest ([IO.File]::ReadAllText((Join-Path $raceDestination 'dns-direct-domains.txt')) -ceq 'user-modified-first-output') 'Rollback deleted concurrently modified first-file user content.'
-        Assert-MosdnsTest ([IO.File]::ReadAllText((Join-Path $raceDestination 'mosdns.yaml')) -ceq 'concurrent-second-output') 'Writer overwrote or deleted the concurrent second-file occupant.'
+        Assert-MosdnsTest ([IO.File]::ReadAllText((Join-Path $raceDestination 'mosdns.json')) -ceq 'concurrent-second-output') 'Writer overwrote or deleted the concurrent second-file occupant.'
         Assert-MosdnsTest ($script:mosdnsRaceMoveCount -eq 2) 'Rollback race did not fail on the second staged output.'
     }
     finally {
@@ -381,8 +384,8 @@ function Test-MosdnsMetricsApi {
     return Invoke-MosdnsMetricsProbe -Url ('http://127.0.0.1:'+$Port+'/metrics') -Deadline $Deadline
 }
 
-if (-not (Test-Path -LiteralPath $SingBoxPath -PathType Leaf)) { throw ('Missing official sing-box decompiler: ' + $SingBoxPath) }
-if (-not (Test-Path -LiteralPath $MosdnsPath -PathType Leaf)) { throw ('Missing official Windows MosDNS validator: ' + $MosdnsPath) }
+if (-not (Test-Path -LiteralPath $SingBoxPath -PathType Leaf)) { throw ('Missing pinned sing-box decompiler: ' + $SingBoxPath) }
+if (-not (Test-Path -LiteralPath $MosdnsPath -PathType Leaf)) { throw ('Missing pinned MosDNS validator: ' + $MosdnsPath) }
 
 Test-MosdnsBoundedMetricsProbe
 Write-Output 'MosDNS HTTP fixtures passed: normal metrics is accepted, bad status/body are rejected, and stalled-header plus slow-body connections time out and close their sockets.'
@@ -405,51 +408,46 @@ $expectedOrdinaryDirectTags=[string[]]@($adapterSourceConfig.dns.rules[$ordinary
 $actualExtractedDirectTags=[string[]]@($plan.source_hashes | Where-Object { $_.PSObject.Properties['tag'] -and $_.tag -cne 'routing-reject-domain' } | ForEach-Object { [string]$_.tag })
 Assert-MosdnsTest (($actualExtractedDirectTags -join "`n") -ceq ($expectedOrdinaryDirectTags -join "`n") -and $plan.direct_rule_set_count -eq $expectedOrdinaryDirectTags.Count) 'Adapter did not extract exactly the ordinary direct DNS selectors after the validated DNS prelude.'
 Assert-MosdnsTest ($plan.full_count -gt 0 -and $plan.domain_count -gt 0 -and $plan.regexp_count -gt 0) 'Expected full, suffix, and precompiled residual regex predicates.'
-Assert-MosdnsTest ($plan.domain_lines -notcontains 'invert' -and $plan.candidate_yaml -notmatch 'fakeip|reverse_mapping|dump_file|enable_http3|so_mark|domain_keyword') 'Forbidden DNS feature or negative rule entered the plan.'
-Assert-MosdnsTest ($plan.candidate_yaml -match '(?s)exec: \$direct_ordinary_fallback\s+- matches: has_resp\s+exec: accept\s+- exec: \$proxy_ordinary_fallback') 'A direct DNS answer must be accepted before the default proxy fallback can run.'
-Assert-MosdnsTest ($plan.candidate_yaml -match '(?s)api:\s+http: 127\.0\.0\.1:15357') 'The metrics API must be bound only to loopback port 15357.'
-Assert-MosdnsTest ($plan.candidate_yaml -notmatch '0\.0\.0\.0:15357|\[::\]:15357') 'The metrics API must not bind a LAN or wildcard interface.'
-Assert-MosdnsTest ($plan.candidate_yaml -match '(?s)qtype 1\s+- rcode 0\s+- resp_ip 0\.0\.0\.0/0\s+exec: ttl 3600') 'Node TTL rewrite must be guarded by A query, NOERROR, and an IPv4 response.'
-Assert-MosdnsTest ($plan.node_ttl_policy -match 'CNAME and TTL=0 records.*OPT is not rewritten') 'Production TTL 3600 must disclose whole-message CNAME/TTL=0 behavior and OPT exclusion.'
-$expectedUpstreamIdleTimeouts = @{
-    tencent_direct = 120
-    ali_direct = 120
-    google_proxy = 120
-    cloudflare_proxy = 120
+Assert-MosdnsTest ($plan.domain_lines -notcontains 'invert' -and $plan.candidate_json -notmatch 'fakeip|reverse_mapping|dump_file|enable_http3|so_mark|domain_keyword') 'Forbidden DNS feature or negative rule entered the plan.'
+$candidate = $plan.candidate_json | ConvertFrom-Json
+$plugins = @{}
+foreach ($plugin in $candidate.plugins) { $plugins[$plugin.tag]=$plugin }
+$ordinary = @($plugins['ordinary_sequence'].args)
+$node = @($plugins['node_sequence'].args)
+Assert-MosdnsTest ((@($ordinary[-3..-1] | ForEach-Object exec) -join ',') -ceq '$direct_ordinary_fallback,accept,$proxy_ordinary_fallback' -and $ordinary[-2].matches -ceq 'has_resp') 'A direct DNS answer must be accepted before proxy fallback.'
+Assert-MosdnsTest ($candidate.api.http -ceq '127.0.0.1:15357' -and @($candidate.api.PSObject.Properties).Count -eq 1) 'Metrics must bind only to the loopback port.'
+$ttl = @($node | Where-Object exec -CEQ 'ttl 3600')
+Assert-MosdnsTest ($ttl.Count -eq 1 -and ($ttl[0].matches -join ',') -ceq 'qtype 1,rcode 0,resp_ip 0.0.0.0/0') 'Node TTL rewrite must be guarded by A query, NOERROR and IPv4 response.'
+Assert-MosdnsTest ($plan.node_ttl_policy -match 'CNAME and TTL=0 records.*OPT is not rewritten') 'Expected disclosure of whole-message TTL behavior.'
+$forwards = @($candidate.plugins | Where-Object type -CEQ 'forward')
+$upstreams = @($forwards | ForEach-Object { $_.args.upstreams })
+Assert-MosdnsTest ($forwards.Count -eq 4 -and ($upstreams.tag -join ',') -ceq 'ali_direct,tencent_direct,cloudflare_proxy,google_proxy') 'Expected the four ordinary DoH forwards.'
+foreach ($forward in $forwards) {
+    $upstream = @($forward.args.upstreams)
+    Assert-MosdnsTest ($forward.args.concurrent -eq 1 -and $upstream.Count -eq 1 -and $upstream[0].idle_timeout -eq 120 -and
+        'enable_http3' -cnotin $upstream[0].PSObject.Properties.Name -and 'max_conns' -cnotin $upstream[0].PSObject.Properties.Name) ('Unexpected DoH options for '+$forward.tag)
 }
-$upstreamBlocks = [regex]::Matches($plan.candidate_yaml, '(?m)^\s{8}- tag: ([a-z_]+)\r?\n(?<body>(?:(?!^\s{8}- tag: ).*(?:\r?\n|$))*)')
-$actualUpstreamTags = New-Object 'System.Collections.Generic.List[string]'
-foreach ($block in $upstreamBlocks) {
-    $tag = [string]$block.Groups[1].Value
-    $actualUpstreamTags.Add($tag)
-    Assert-MosdnsTest ($expectedUpstreamIdleTimeouts.ContainsKey($tag)) ('Unexpected DoH upstream tag: ' + $tag)
-    $expectedTimeout = [int]$expectedUpstreamIdleTimeouts[$tag]
-    Assert-MosdnsTest ($block.Groups['body'].Value -match ('(?m)^\s+idle_timeout:\s*' + $expectedTimeout + '\s*$')) ('DoH idle timeout mismatch for ' + $tag)
-    Assert-MosdnsTest ($block.Groups['body'].Value -notmatch '(?m)^\s+(enable_http3|max_conns):') ('DoH upstream ' + $tag + ' must not set HTTP/3 or deprecated max_conns')
+foreach ($mode in @('ordinary','node')) {
+    $cache=$plugins[$mode+'_cache']
+    $lazyTTL=if ($mode -ceq 'ordinary') { 3600 } else { 0 }
+    Assert-MosdnsTest ($cache.type -ceq 'cache' -and $cache.args.size -eq 65472 -and $cache.args.lazy_cache_ttl -eq $lazyTTL) ('Cache settings changed for '+$mode)
 }
-Assert-MosdnsTest (($actualUpstreamTags -join ',') -ceq 'ali_direct,tencent_direct,cloudflare_proxy,google_proxy') 'MosDNS must define only the four ordinary Ali/Tencent and Cloudflare/Google DoH upstreams.'
-Assert-MosdnsTest ([regex]::Matches($plan.candidate_yaml,'(?m)^    type: forward\r?$').Count -eq 4) 'The package must contain exactly four forward plugin definitions.'
-Assert-MosdnsTest ($plan.candidate_yaml -match '(?s)- tag: ordinary_cache\s+type: cache\s+args:\s+size: 65472\s+lazy_cache_ttl: 3600') 'Ordinary DNS cache settings changed.'
-Assert-MosdnsTest ($plan.candidate_yaml -match '(?s)- tag: node_cache\s+type: cache\s+args:\s+size: 65472\s+lazy_cache_ttl: 0') 'Node DNS cache settings changed.'
-$forwardTags = @('direct_ali_forward','direct_tencent_forward','proxy_cloudflare_forward','proxy_google_forward')
-foreach ($tag in $forwardTags) {
-    Assert-MosdnsTest ($plan.candidate_yaml -match ('(?s)- tag: ' + $tag + '\s+type: forward\s+args:\s+concurrent: 1')) ('Each independent upstream forward must have concurrency 1: ' + $tag)
+foreach ($kind in @('direct','proxy')) {
+    $fallback=$plugins[$kind+'_ordinary_fallback']
+    $threshold=if ($kind -ceq 'direct') { 300 } else { 2000 }
+    Assert-MosdnsTest ($fallback.type -ceq 'fallback' -and $fallback.args.primary -ceq ($kind+'_ordinary_primary') -and
+        $fallback.args.secondary -ceq ($kind+'_ordinary_backup') -and $fallback.args.threshold -eq $threshold -and
+        $fallback.args.always_standby -eq $false) ('Fallback settings changed for '+$kind)
+    foreach ($role in @('primary','backup')) {
+        $steps=@($plugins[$kind+'_ordinary_'+$role].args)
+        Assert-MosdnsTest ($steps[-1].exec -ceq 'drop_resp' -and ($steps[-1].matches -join ',') -ceq '!rcode 0,!rcode 3') ('Fallback must retry DNS failures for '+$kind+' '+$role)
+    }
 }
-Assert-MosdnsTest ($plan.candidate_yaml -match '(?s)- tag: direct_ordinary_fallback\s+type: fallback\s+args:\s+primary: direct_ordinary_primary\s+secondary: direct_ordinary_backup\s+threshold: 300\s+always_standby: false') 'Direct fallback must prefer Ali for 300ms before hedging to Tencent.'
-Assert-MosdnsTest ($plan.candidate_yaml -match '(?s)- tag: proxy_ordinary_fallback\s+type: fallback\s+args:\s+primary: proxy_ordinary_primary\s+secondary: proxy_ordinary_backup\s+threshold: 2000\s+always_standby: false') 'Proxy fallback must prefer Cloudflare for 2000ms before hedging to Google.'
-Assert-MosdnsTest ($plan.dns_provider_policy.direct_primary -ceq 'Ali DoH direct egress' -and
-    $plan.dns_provider_policy.direct_backup -match 'Tencent DoH direct egress.*300ms' -and
-    $plan.dns_provider_policy.proxy_primary -ceq 'Cloudflare DoH through sing-box SOCKS' -and
-    $plan.dns_provider_policy.proxy_backup -match 'Google DoH through sing-box SOCKS.*2000ms' -and
-    $plan.dns_provider_policy.maximum_no_answer_wait_seconds.direct -eq 5.3 -and
-    $plan.dns_provider_policy.maximum_no_answer_wait_seconds.proxy -eq 7.0) 'Ordinary DNS provider policy or deadline metadata changed during the node-only correction.'
-Assert-MosdnsTest ([regex]::Matches($plan.candidate_yaml, "'!rcode 0'").Count -eq 4 -and [regex]::Matches($plan.candidate_yaml, "'!rcode 3'").Count -eq 4) 'The four ordinary primary/backup branches must retry response codes other than NOERROR or NXDOMAIN.'
-Assert-MosdnsTest ($plan.candidate_yaml -match '(?s)exec: metrics_collector ordinary_dns.*?exec: \$ordinary_cache') 'Ordinary DNS must include a standard request metrics collector.'
-Assert-MosdnsTest ($plan.candidate_yaml -match '(?s)exec: metrics_collector node_dns.*?exec: \$node_cache') 'Node DNS must include a standard request metrics collector.'
-$nodeSequenceMatch = [regex]::Match($plan.candidate_yaml, '(?ms)^  - tag: node_sequence\r?\n(?<body>.*?)(?=^  - tag: ordinary_udp)')
-Assert-MosdnsTest ($nodeSequenceMatch.Success -and $nodeSequenceMatch.Groups['body'].Value -match '(?s)\$node_cache.*?\$direct_ordinary_fallback') 'Node A requests must use the independent node cache before the shared ordinary direct fallback.'
-Assert-MosdnsTest ($nodeSequenceMatch.Groups['body'].Value -notmatch '\$ordinary_cache|\$proxy_ordinary_fallback|\$direct_domains') 'Node DNS must retain its separate cache and direct-only path regardless of the ordinary direct-domain set.'
-Assert-MosdnsTest ($plan.candidate_yaml -notmatch 'node_ali_forward|node_tencent_forward|node_ali_primary|node_tencent_backup|node_fallback|ali_node_direct|tencent_node_direct') 'Node policy must not duplicate direct provider forwards, branches, or metrics collectors.'
+Assert-MosdnsTest ($ordinary[0].exec -ceq 'metrics_collector ordinary_dns' -and $node[0].exec -ceq 'metrics_collector node_dns') 'Each DNS sequence must use its metrics collector.'
+$nodeActions=@($node | ForEach-Object exec)
+Assert-MosdnsTest ([array]::IndexOf($nodeActions,'$node_cache') -ge 0 -and
+    [array]::IndexOf($nodeActions,'$node_cache') -lt [array]::IndexOf($nodeActions,'$direct_ordinary_fallback') -and
+    '$ordinary_cache' -cnotin $nodeActions -and '$proxy_ordinary_fallback' -cnotin $nodeActions) 'Node queries must use their own cache and shared direct providers.'
 Assert-MosdnsTest ($plan.dns_provider_policy.node -match 'inherits the ordinary direct provider policy.*no separate node provider definition' -and
     $plan.dns_provider_policy.node_cache -match 'node_cache only.*65472.*lazy_cache_ttl 0.*TTL 3600.*expired entries are not reused') 'Generated metadata must describe shared direct providers and the independent node cache behavior.'
 Assert-MosdnsTest ($plan.dns_provider_policy.node_forward_query_timeout_seconds -eq 5 -and
@@ -492,14 +490,14 @@ Assert-MosdnsTest (-not [regex]::IsMatch('x.blocked.example.net',$residual)) 'Re
         $published.regexp_count -eq $plan.regexp_count) 'Writer return counts differ from the extracted source plan.'
     Assert-MosdnsTest ($published.node_ttl_policy -match 'CNAME and TTL=0 records.*OPT is not rewritten') 'Writer must disclose whole-answer TTL behavior.'
     $payloadNames = @(Get-ChildItem -LiteralPath $payload -File | ForEach-Object Name | Sort-Object)
-    $expectedPayload = @('dns-direct-domains.txt','mosdns.yaml')
+    $expectedPayload = @('dns-direct-domains.txt','mosdns.json')
     if ($hasRejectList) { $expectedPayload += 'dns-reject-domains.txt' }
     Assert-MosdnsTest (($payloadNames -join ',') -ceq (($expectedPayload | Sort-Object) -join ',')) 'Payload has the wrong flat policy files.'
     Assert-MosdnsTest (($plan.reject_domain_lines.Count -gt 0) -eq $hasRejectList) 'Extracted DNS reject policy must match the snapshot.'
     $domainFile = $published.paths.dns_direct_domains
-    $yamlFile = $published.paths.mosdns_yaml
+    $jsonFile = $published.paths.mosdns_json
     $testEncoding = New-Object Text.UTF8Encoding($false)
-    $policyFiles = @($domainFile,$yamlFile)
+    $policyFiles = @($domainFile,$jsonFile)
     if ($hasRejectList) {
         $rejectFile = Join-Path $payload 'dns-reject-domains.txt'
         $policyFiles += $rejectFile
@@ -521,21 +519,22 @@ Assert-MosdnsTest (-not [regex]::IsMatch('x.blocked.example.net',$residual)) 'Re
     if ($hasRejectList) {
         Copy-Item -LiteralPath $rejectFile -Destination (Join-Path $isolated 'dns-reject-domains.txt')
     }
-    $yaml = [IO.File]::ReadAllText($yamlFile).Replace('127.0.0.1:15353',('127.0.0.1:' + $ports[0])).Replace('127.0.0.1:15354',('127.0.0.1:' + $ports[1])).Replace('127.0.0.1:15357',('127.0.0.1:' + $ports[2]))
-    $configPath = Join-Path $isolated 'mosdns.yaml'
-    [IO.File]::WriteAllText($configPath,$yaml,$testEncoding)
+    Write-MosdnsBinaryDomainSets -Directory $isolated -MosdnsPath $MosdnsPath
+    $json = [IO.File]::ReadAllText($jsonFile).Replace('127.0.0.1:15353',('127.0.0.1:' + $ports[0])).Replace('127.0.0.1:15354',('127.0.0.1:' + $ports[1])).Replace('127.0.0.1:15357',('127.0.0.1:' + $ports[2]))
+    $configPath = Join-Path $isolated 'mosdns.json'
+    [IO.File]::WriteAllText($configPath,$json,$testEncoding)
     $stdout = Join-Path $temporary 'mosdns.stdout.log'
     $stderr = Join-Path $temporary 'mosdns.stderr.log'
     $arguments = 'start -c "' + $configPath + '" -d "' + $isolated + '"'
-    $child = Start-Process -FilePath $MosdnsPath -ArgumentList $arguments -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
-    $deadline = [DateTime]::UtcNow.AddSeconds(15)
+    $child = Start-Process -FilePath $MosdnsPath -ArgumentList $arguments -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+    $deadline = [DateTime]::UtcNow.AddSeconds(45)
     $ready = $false
     while ([DateTime]::UtcNow -lt $deadline) {
         $child.Refresh()
         if ($child.HasExited) {
             $outText = if (Test-Path -LiteralPath $stdout) { [IO.File]::ReadAllText($stdout) } else { '' }
             $errText = if (Test-Path -LiteralPath $stderr) { [IO.File]::ReadAllText($stderr) } else { '' }
-            throw ('Official MosDNS rejected generated YAML or full/domain/regexp rules: ' + $errText + ' ' + $outText)
+            throw ('Pinned MosDNS rejected generated JSON or full/domain/regexp rules: ' + $errText + ' ' + $outText)
         }
         $ready = (Test-MosdnsTcpListener -Port $ports[0] -Deadline $deadline) -and
             (Test-MosdnsTcpListener -Port $ports[1] -Deadline $deadline) -and
@@ -543,10 +542,10 @@ Assert-MosdnsTest (-not [regex]::IsMatch('x.blocked.example.net',$residual)) 'Re
         if ($ready) { break }
         Start-Sleep -Milliseconds 100
     }
-    Assert-MosdnsTest $ready 'Official MosDNS did not bind both isolated DNS listeners and the loopback metrics API.'
+    Assert-MosdnsTest $ready 'Pinned MosDNS did not bind both isolated DNS listeners and the loopback metrics API.'
     Test-MosdnsWriterSafetyFixtures -Plan $plan -SourceRoot $adapterSourceRoot -SingBoxPath $SingBoxPath -FixtureParent $temporary
     Write-Output 'MosDNS writer fixtures passed: junction ancestors and stage children are rejected, and rollback preserves a concurrently modified first output plus the second-file conflict.'
-    Write-Output ('Official MosDNS v5.3.4 isolated startup passed; loaded ' + $plan.direct_domain_rule_count + ' snapshot predicates (' + $plan.full_count + ' full, ' + $plan.domain_count + ' domain, ' + $plan.regexp_count + ' regexp) plus the synthetic partial-suffix RE2 case; local /metrics returned successfully. No DNS query or production listener was used.')
+    Write-Output ('Pinned MosDNS 0.0.2 isolated startup passed; loaded ' + $plan.direct_domain_rule_count + ' snapshot predicates (' + $plan.full_count + ' full, ' + $plan.domain_count + ' domain, ' + $plan.regexp_count + ' regexp) plus the synthetic partial-suffix RE2 case; local /metrics returned successfully. No DNS query or production listener was used.')
     Write-Output ('Writer passed with the expected isolated policy files: ' + ($payloadNames -join ', ') + '.')
 }
 finally {

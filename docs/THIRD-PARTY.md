@@ -12,7 +12,7 @@
 
 项目对规则做格式转换、规范化、按优先级裁剪并合并为 SRS 或 OpenWrt 策略。
 
-- [sing-box v1.14.4 源码及许可证](https://github.com/SagerNet/sing-box/tree/v1.14.4)
-- [mosdns v5.3.4 源码及许可证](https://github.com/IrineSistiana/mosdns/tree/v5.3.4)
+- [自有 sing-box ARM64 0.0.2](https://github.com/lyleee0083/xiaomi-be7000-singbox/releases/tag/sing-box-xiaomi-be7000-0.0.2)，发布提交 `273a764394fb3db315b009d18f19c8046ee4ad76`，来自 [sing-box v1.14.4 源码及许可证](https://github.com/SagerNet/sing-box/tree/v1.14.4)。客户端 CI 用该核心编译与校验规则。
+- [自有 MosDNS ARM64 0.0.2](https://github.com/lyleee0083/xiaomi-be7000-mosdns/releases/tag/mosdns-xiaomi-be7000-0.0.2)，发布提交 `5317ba126ac48419187f72bdc2d37409c0936c3f`。BE7000 CI 用该核心编译 MDRS 和校验配置。上游为 [mosdns v5 源码及许可证](https://github.com/IrineSistiana/mosdns/tree/9cfb7ce985599c087cb7ccfb1531d0c0f4021242)。
 
 - [Zstandard 源码及许可证](https://github.com/meta/zstd)，Actions 通过 Ubuntu 的 libzstd1 解码 MRS。
