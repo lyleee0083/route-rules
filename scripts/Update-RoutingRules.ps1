@@ -419,38 +419,6 @@ function Write-CurlConditionalHeaderFile {
     return $true
 }
 
-function Assert-RoutingFetchPathsSupported {
-    param([Parameter(Mandatory)][string]$CachePath,[Parameter(Mandatory)][int]$ResourceCount)
-    if ($ResourceCount -lt 0) { throw 'Routing fetch resource count cannot be negative.' }
-    if ($ResourceCount -eq 0) { return }
-    if ($env:OS -ne 'Windows_NT' -or [int]$PSVersionTable.PSVersion.Major -gt 5) { return }
-
-    # Windows PowerShell 5.1 may report ordinary MAX_PATH files as missing.
-    # Check every future path before locks, stages, or network requests begin.
-    try {
-        $fullCachePath = [IO.Path]::GetFullPath($CachePath)
-        $pathRoot = [IO.Path]::GetPathRoot($fullCachePath)
-        if (-not [string]::Equals($fullCachePath, $pathRoot, [StringComparison]::OrdinalIgnoreCase)) {
-            $fullCachePath = $fullCachePath.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
-        }
-    }
-    catch { throw "Windows PowerShell 5.1 cannot normalize the routing fetch root before any transaction writes: $($_.Exception.Message)" }
-    $fullCacheRoot = $fullCachePath + '.update.stage'
-    $fetchRoot = Join-Path $fullCacheRoot ('.routing-fetch-' + ('0' * 32))
-    if ($fetchRoot.Length -ge 248) {
-        throw "Windows PowerShell 5.1 fetch directory exceeds the legacy path limit ($($fetchRoot.Length) characters): $fetchRoot"
-    }
-    for ($index = 0; $index -lt $ResourceCount; $index++) {
-        $stem = 'r' + $index.ToString([Globalization.CultureInfo]::InvariantCulture)
-        foreach ($suffix in @('.d','.h','.h.request')) {
-            $candidate = [IO.Path]::GetFullPath((Join-Path $fetchRoot ($stem + $suffix)))
-            if ($candidate.Length -ge 260) {
-                throw "Windows PowerShell 5.1 fetch file exceeds MAX_PATH ($($candidate.Length) characters): $candidate"
-            }
-        }
-    }
-}
-
 function Invoke-RoutingResourceFetches {
     param(
         [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$ResourcePlan,
@@ -481,7 +449,7 @@ function Invoke-RoutingResourceFetches {
     }
     $fetchRoot = Join-Path $CacheRoot ('.routing-fetch-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $fetchRoot -Force | Out-Null
-    $curlCommand = Get-Command $(if ([IO.Path]::DirectorySeparatorChar -eq [char]'/') { 'curl' } else { 'curl.exe' }) -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    $curlCommand = Get-Command 'curl' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     $curlPath = if ($curlCommand) { $curlCommand.Source } else { '' }
     $worker = {
         param([string]$Url, [string]$DownloadPath, [string]$HeaderPath, [string]$CurlPath, [string]$ETag, [string]$LastModified)
@@ -695,7 +663,7 @@ function Get-RemoteSource {
                 try { $metadata = Read-JsonFile $metadataPath } catch { $metadata = $null }
             }
             $canRequestConditionally = $metadata -and $metadata.url -eq $Resource.url -and (Test-Path -LiteralPath $cachePath -PathType Leaf)
-            $curl = Get-Command $(if ([IO.Path]::DirectorySeparatorChar -eq [char]'/') { 'curl' } else { 'curl.exe' }) -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+            $curl = Get-Command 'curl' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($curl) {
                 $arguments = @(
                     '-sS', '-L', '--retry', '3', '--retry-delay', '2', '--max-time', '180',
@@ -863,19 +831,8 @@ function Resolve-ZstdLibrary {
 
     $candidates = [System.Collections.Generic.List[string]]::new()
     if ($RequestedPath) { $candidates.Add($RequestedPath) }
-    if ([IO.Path]::DirectorySeparatorChar -eq [char]'/') {
-        $candidates.Add('/usr/lib/x86_64-linux-gnu/libzstd.so.1')
-        $candidates.Add('/usr/lib/aarch64-linux-gnu/libzstd.so.1')
-    }
-    $candidates.Add((Join-Path $script:ProjectRoot 'tools\libzstd.dll'))
-    $candidates.Add('C:\Program Files\Git\mingw64\bin\libzstd.dll')
-    $candidates.Add('C:\Program Files (x86)\Git\mingw64\bin\libzstd.dll')
-    if ($env:LOCALAPPDATA) { $candidates.Add((Join-Path $env:LOCALAPPDATA 'Programs\Git\mingw64\bin\libzstd.dll')) }
-    $git = Get-Command 'git' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($git) {
-        $gitRoot = [System.IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $git.Source) '..'))
-        $candidates.Add((Join-Path $gitRoot 'mingw64\bin\libzstd.dll'))
-    }
+    $candidates.Add('/usr/lib/x86_64-linux-gnu/libzstd.so.1')
+    $candidates.Add('/usr/lib/aarch64-linux-gnu/libzstd.so.1')
     foreach ($candidate in $candidates) {
         if ($candidate -and (Test-Path -LiteralPath $candidate -PathType Leaf)) {
             return (Resolve-Path -LiteralPath $candidate).Path
@@ -889,7 +846,6 @@ function Initialize-MrsReader {
 
     $source = @'
 using System;
-using System.ComponentModel;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -902,16 +858,6 @@ public static class RoutingMrsReader {
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate UIntPtr DecompressFn(IntPtr dst, UIntPtr capacity, IntPtr src, UIntPtr size);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate uint IsErrorFn(UIntPtr code);
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern IntPtr LoadLibraryW(string fileName);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
-    private static extern IntPtr GetProcAddress(IntPtr module, string name);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool FreeLibrary(IntPtr module);
-
     [DllImport("libdl.so.2", CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr dlopen(string path, int flags);
 
@@ -921,22 +867,19 @@ public static class RoutingMrsReader {
     [DllImport("libdl.so.2", CallingConvention = CallingConvention.Cdecl)]
     private static extern int dlclose(IntPtr module);
 
-    private static readonly bool IsLinux = Environment.OSVersion.Platform == PlatformID.Unix;
     private const int ResolveAllSymbols = 2;
 
     private static IntPtr GetRequiredExport(IntPtr library, string name) {
-        IntPtr address = IsLinux ? dlsym(library, name) : GetProcAddress(library, name);
+        IntPtr address = dlsym(library, name);
         if (address == IntPtr.Zero) {
-            if (!IsLinux) throw new Win32Exception(Marshal.GetLastWin32Error(), "找不到 Zstandard 导出函数：" + name);
             throw new EntryPointNotFoundException("找不到 Zstandard 导出函数：" + name);
         }
         return address;
     }
 
     private static byte[] Decompress(string libraryPath, byte[] data) {
-        IntPtr library = IsLinux ? dlopen(libraryPath, ResolveAllSymbols) : LoadLibraryW(libraryPath);
+        IntPtr library = dlopen(libraryPath, ResolveAllSymbols);
         if (library == IntPtr.Zero) {
-            if (!IsLinux) throw new Win32Exception(Marshal.GetLastWin32Error(), "无法加载 Zstandard 动态库：" + libraryPath);
             throw new DllNotFoundException("无法加载 Zstandard 动态库：" + libraryPath);
         }
         IntPtr source = IntPtr.Zero;
@@ -961,8 +904,7 @@ public static class RoutingMrsReader {
         finally {
             if (source != IntPtr.Zero) Marshal.FreeHGlobal(source);
             if (destination != IntPtr.Zero) Marshal.FreeHGlobal(destination);
-            if (IsLinux) dlclose(library);
-            else FreeLibrary(library);
+            dlclose(library);
         }
     }
 
@@ -2619,9 +2561,6 @@ if (-not [string]::IsNullOrWhiteSpace($ZstdLibraryPath)) {
     $protectedPaths.Add($resolvedZstdInputPath)
 }
 $protectedProjectRoots = Get-RoutingProtectedProjectRoots -ProjectRoot $script:ProjectRoot
-if (-not $Offline) {
-    Assert-RoutingFetchPathsSupported -CachePath $CacheDirectory -ResourceCount (@($manifest.resources).Count)
-}
 $transactionPaths = Get-RoutingTransactionPaths -CachePath $CacheDirectory -OutputPath $OutputPath -ManifestPath $resolvedManifestPath -ProtectedPaths ([string[]]$protectedPaths.ToArray()) -ProtectedRoots $protectedProjectRoots
 $publishedCacheDirectory = $transactionPaths.CachePath
 $publishedOutputPath = $transactionPaths.OutputPath

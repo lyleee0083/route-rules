@@ -44,8 +44,7 @@ $functionNames = @(
     'Complete-RoutingCommittedTransaction',
     'Rollback-RoutingPreparedTransaction',
     'Invoke-RoutingTransactionRecovery',
-    'Publish-RoutingTransaction',
-    'Assert-RoutingFetchPathsSupported'
+    'Publish-RoutingTransaction'
 )
 foreach ($functionName in $functionNames) {
     $definition = $ast.FindAll({
@@ -507,41 +506,6 @@ Assert-True ($legacyHeaderPath.Length -ge 264) 'controlled online fixture reprod
 Assert-True ($shortHeaderPath.Length -lt 260 -and $shortRequestHeaderPath.Length -lt 260) 'batch-index fetch temp paths remain below PS5.1 MAX_PATH at the same fixture depth'
 $onlineOutput = Join-Path $onlineFixture 'merged.json'
 
-if ($env:OS -eq 'Windows_NT' -and [int]$PSVersionTable.PSVersion.Major -le 5) {
-    $deepLeafLength = [Math]::Max(1, (205 - $TestRoot.Length - 1))
-    $deepCachePath = Join-Path $TestRoot ('d' * $deepLeafLength)
-    $deepStagePath = $deepCachePath + '.update.stage'
-    $deepManifestPath = Join-Path $TestRoot 'too-deep-sources.json'
-    $deepManifestValue = [ordered]@{
-        version = 2
-        conflict_policy = [ordered]@{ earlier_rule='wins'; later_overlap='ordered-first-match' }
-        resources = @([ordered]@{ tag='deep'; type='remote'; format='plain'; url='http://127.0.0.1:1/not-used.txt' })
-        rules = @()
-    }
-    [System.IO.File]::WriteAllText($deepManifestPath, ($deepManifestValue | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
-    $preflightRejected = $false
-    try { Assert-RoutingFetchPathsSupported -CachePath $deepCachePath -ResourceCount 1 } catch { $preflightRejected = $_.Exception.Message -match 'Windows PowerShell 5\.1' }
-    Assert-True $preflightRejected 'PS5.1 rejects a fetch path that exceeds legacy MAX_PATH before creating its cache root'
-    Assert-True (-not (Test-AnyPathExists $deepCachePath) -and -not (Test-AnyPathExists $deepStagePath)) 'pure PS5.1 path preflight creates no cache or stage'
-    $deepOutputPath = Join-Path $TestRoot 'too-deep-output.json'
-    $deepArtifacts = @(
-        $deepCachePath,
-        ($deepCachePath + '.update.stage'),
-        ($deepCachePath + '.update.backup'),
-        ($deepCachePath + '.update.lock'),
-        ($deepOutputPath + '.update.stage'),
-        ($deepOutputPath + '.update.backup'),
-        ($deepOutputPath + '.update.lock'),
-        ($deepOutputPath + '.update.transaction.json'),
-        ($deepOutputPath + '.update.transaction.write.tmp'),
-        ($deepOutputPath + '.update.transaction.replace.backup')
-    )
-    $entrypointRejected = $false
-    try { & $UpdaterPath -ManifestPath $deepManifestPath -CacheDirectory $deepCachePath -OutputPath $deepOutputPath } catch { $entrypointRejected = $true }
-    Assert-True $entrypointRejected 'online updater entry point rejects the PS5.1 path before transaction writes'
-    foreach ($deepArtifact in $deepArtifacts) { Assert-True (-not (Test-AnyPathExists $deepArtifact)) "PS5.1 preflight rejection created transaction state: $deepArtifact" }
-    Assert-True (-not (Test-AnyPathExists $deepCachePath) -and -not (Test-AnyPathExists $deepStagePath)) 'PS5.1 entrypoint rejection leaves deep cache and stage absent'
-}
 
 $loopbackServer = [RoutingTransactionLoopbackServer]::new(2)
 $proxyEnvironmentNames = @('HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','http_proxy','https_proxy','all_proxy')

@@ -370,7 +370,7 @@ try {
     Assert-NodeDnsPolicyShape -Configuration $baseConfiguration -Port 15354
     $baseNodePolicy = Get-NodeDnsPolicySpec -Port 15354
 
-    $singBox = Resolve-PinnedSingBoxChecker -ProjectRoot $projectRoot -RuntimeFallbackPath ''
+    $singBox = Resolve-PinnedSingBoxChecker -ProjectRoot $projectRoot
     if (-not $singBox) { throw 'Project-pinned sing-box 1.14.4 is unavailable.' }
     $singBox = [IO.Path]::GetFullPath($singBox)
     $coreRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'openwrt\build-stage\cores')).TrimEnd([char[]]'\/')
