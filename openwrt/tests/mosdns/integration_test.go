@@ -26,7 +26,6 @@ type responsePlan struct {
 	answer          bool
 	ttl             uint32
 	delay           time.Duration
-	silent          bool
 	wholeMessageTTL bool
 }
 
@@ -34,14 +33,6 @@ type dohAction struct {
 	dns        responsePlan
 	httpStatus int
 	timeout    bool
-}
-
-type upstream struct {
-	conn     *net.UDPConn
-	count    atomic.Int32
-	byNameMu sync.Mutex
-	byName   map[string]int
-	reply    func(string) responsePlan
 }
 
 func successfulAnswer(ttl uint32) responsePlan {
@@ -114,51 +105,6 @@ func makeDNSResponse(request []byte, questionEnd int, plan responsePlan) []byte 
 		response = append(response, answer...)
 	}
 	return response
-}
-
-func startUpstream(t *testing.T, reply func(string) responsePlan) *upstream {
-	t.Helper()
-	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	u := &upstream{conn: conn, byName: make(map[string]int), reply: reply}
-	t.Cleanup(func() { _ = conn.Close() })
-	go func() {
-		buffer := make([]byte, 4096)
-		for {
-			n, addr, readErr := conn.ReadFromUDP(buffer)
-			if readErr != nil {
-				return
-			}
-			request := append([]byte(nil), buffer[:n]...)
-			name, questionEnd, parseErr := parseQuestion(request)
-			if parseErr != nil {
-				continue
-			}
-			u.count.Add(1)
-			u.byNameMu.Lock()
-			u.byName[name]++
-			u.byNameMu.Unlock()
-			plan := u.reply(name)
-			if plan.silent {
-				continue
-			}
-			go func(request []byte, questionEnd int, addr *net.UDPAddr, plan responsePlan) {
-				if plan.delay > 0 {
-					time.Sleep(plan.delay)
-				}
-				_, _ = conn.WriteToUDP(makeDNSResponse(request, questionEnd, plan), addr)
-			}(request, questionEnd, addr, plan)
-		}
-	}()
-	return u
-}
-
-func (u *upstream) requestsFor(name string) int {
-	u.byNameMu.Lock()
-	defer u.byNameMu.Unlock()
-	return u.byName[name]
 }
 
 type dohMock struct {
@@ -257,6 +203,13 @@ func startDoHMock(t *testing.T, plan func(string) dohAction) (*httptest.Server, 
 	return server, mock
 }
 
+func startDoHResponseMock(t *testing.T, reply func(string) responsePlan) (*httptest.Server, *dohMock) {
+	t.Helper()
+	return startDoHMock(t, func(name string) dohAction {
+		return dohAction{dns: reply(name)}
+	})
+}
+
 func startDoHPrimary(t *testing.T) (*httptest.Server, *dohMock) {
 	t.Helper()
 	return startDoHMock(t, func(name string) dohAction {
@@ -300,15 +253,14 @@ func policyPlugin(t *testing.T, config map[string]any, tag string) map[string]an
 	return nil
 }
 
-func replaceForward(t *testing.T, config map[string]any, tag, upstreamTag, address string, skipVerify bool) {
+func replaceForward(t *testing.T, config map[string]any, tag, upstreamTag string, server *httptest.Server) {
 	t.Helper()
 	plugin := policyPlugin(t, config, tag)
 	if plugin["type"] != "forward" {
 		t.Fatalf("expected forward plugin %s", tag)
 	}
-	upstream := map[string]any{"tag": upstreamTag, "addr": address}
-	if skipVerify {
-		upstream["insecure_skip_verify"] = true
+	upstream := map[string]any{
+		"tag": upstreamTag, "addr": server.URL + "/dns-query", "insecure_skip_verify": true,
 	}
 	plugin["args"] = map[string]any{"concurrent": 1, "upstreams": []any{upstream}}
 }
@@ -610,7 +562,7 @@ func TestMosdnsPolicyBehavior(t *testing.T) {
 		t.Fatal("duplicate isolated DNS or API test ports")
 	}
 	aliHTTP, aliHTTPMock := startDoHPrimary(t)
-	tencent := startUpstream(t, func(name string) responsePlan {
+	tencentServer, tencent := startDoHResponseMock(t, func(name string) responsePlan {
 		switch name {
 		case "slow-primary-backup-error-direct.test", "node-primary-slow-backup-error.test":
 			return responsePlan{rcode: 5}
@@ -620,7 +572,7 @@ func TestMosdnsPolicyBehavior(t *testing.T) {
 			return successfulAnswer(7)
 		}
 	})
-	cloudflare := startUpstream(t, func(name string) responsePlan {
+	cloudflareServer, cloudflare := startDoHResponseMock(t, func(name string) responsePlan {
 		switch name {
 		case "proxy-both-failed.test":
 			return responsePlan{rcode: 2}
@@ -640,7 +592,7 @@ func TestMosdnsPolicyBehavior(t *testing.T) {
 			return successfulAnswer(5)
 		}
 	})
-	google := startUpstream(t, func(name string) responsePlan {
+	googleServer, google := startDoHResponseMock(t, func(name string) responsePlan {
 		switch name {
 		case "proxy-slow-backup-error.test":
 			return responsePlan{rcode: 5}
@@ -650,10 +602,10 @@ func TestMosdnsPolicyBehavior(t *testing.T) {
 			return successfulAnswer(9)
 		}
 	})
-	replaceForward(t, config, "direct_ali_forward", "ali_direct", aliHTTP.URL+"/dns-query", true)
-	replaceForward(t, config, "direct_tencent_forward", "tencent_direct", "udp://"+tencent.conn.LocalAddr().String(), false)
-	replaceForward(t, config, "proxy_cloudflare_forward", "cloudflare_proxy", "udp://"+cloudflare.conn.LocalAddr().String(), false)
-	replaceForward(t, config, "proxy_google_forward", "google_proxy", "udp://"+google.conn.LocalAddr().String(), false)
+	replaceForward(t, config, "direct_ali_forward", "ali_direct", aliHTTP)
+	replaceForward(t, config, "direct_tencent_forward", "tencent_direct", tencentServer)
+	replaceForward(t, config, "proxy_cloudflare_forward", "cloudflare_proxy", cloudflareServer)
+	replaceForward(t, config, "proxy_google_forward", "google_proxy", googleServer)
 	for tag, address := range map[string]string{
 		"ordinary_udp": ordinaryAddress, "ordinary_tcp": ordinaryAddress,
 		"node_udp": nodeAddress, "node_tcp": nodeAddress,
