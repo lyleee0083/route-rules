@@ -10,7 +10,7 @@
 
 ## 快速开始
 
-1. 从 [GitHub Releases](https://github.com/lyleee0083/route-rules/releases) 或 [GitHub Actions](https://github.com/lyleee0083/route-rules/actions/workflows/be7000.yml) 下载 `route-rules-xiaomi-be7000-v<版本>.zip` 和 `SHA256SUMS.txt`，核对 ZIP。
+1. 从 [GitHub Releases](https://github.com/lyleee0083/route-rules/releases) 或 [GitHub Actions](https://github.com/lyleee0083/route-rules/actions/workflows/be7000.yml) 下载 `route-rules-xiaomi-be7000-<版本>.zip` 和 `SHA256SUMS.txt`，核对 ZIP。
 2. 在私有目录解压 ZIP。在 `config.json` 的 `proxy` 出站填写自己的 VLESS REALITY 节点，并更新包内 `SHA256SUMS` 中 `config.json` 的摘要。
 3. 目标需要 ARM64 OpenWrt、fw4、nftables 和可用的 TUN。从 [sing-box 0.0.2](https://github.com/lyleee0083/xiaomi-be7000-singbox/releases/tag/sing-box-xiaomi-be7000-0.0.2) 和 [MosDNS 0.0.2](https://github.com/lyleee0083/xiaomi-be7000-mosdns/releases/tag/mosdns-xiaomi-be7000-0.0.2) 下载 ARM64 核心，分别按 `/usr/bin/sing-box` 和 `/usr/bin/mosdns` 安装为可执行文件。安装脚本会校验两个核心的 SHA-256。全新安装与激活入口分别为 `sh install.sh --install-authorized` 和 `sh activate.sh --activate-authorized`。已有安装应先按对应版本的迁移流程核对，安装程序会拒绝覆盖。
 
@@ -30,11 +30,11 @@ sha256sum -c SHA256SUMS
 
 ## 配置
 
-上游规则和公开母版位于 [客户端规则来源清单](https://github.com/lyleee0083/route-rules/blob/d1a3bd6041c5ce7467253f6dd62bc06e025d7497/routing/routing-sources.json) 和 [配置母版](https://github.com/lyleee0083/route-rules/blob/d1a3bd6041c5ce7467253f6dd62bc06e025d7497/config/sing-box-core-base.json)。CI 使用示例节点，填写后的配置请在本地保管。
+上游规则和公开母版位于 [客户端规则来源清单](https://github.com/lyleee0083/route-rules/blob/165604a4966318c911349e1f48432ac7e44e9385/routing/routing-sources.json) 和 [配置母版](https://github.com/lyleee0083/route-rules/blob/165604a4966318c911349e1f48432ac7e44e9385/config/sing-box-core-base.json)。CI 使用示例节点，填写后的配置请在本地保管。
 
 ## 构建与测试
 
-[BE7000 工作流](.github/workflows/be7000.yml)在 `ubuntu-latest` 将本分支的 OpenWrt 源码与从 [main 的固定提交](https://github.com/lyleee0083/route-rules/commit/d1a3bd6041c5ce7467253f6dd62bc06e025d7497) 取出的规则、配置和编译器放入独立构建目录，然后运行 Go 控制器与 shell 回归测试，只生成所需的 Linux 客户端快照、生成 MosDNS JSON 配置并编译 `.mdrs` 域名规则，再派生 nftables 策略、交叉构建 ARM64 控制器并核对整个 ZIP。CI 还在本机环回中验证 MosDNS 行为。更新共享源码时，在工作流中修改 `ROUTE_RULES_MAIN_REVISION`，并重新运行 BE7000 测试。真实路由器的启动、nftables 接管与 LAN 转发需另行验收。
+[BE7000 工作流](.github/workflows/be7000.yml)在 `ubuntu-latest` 将本分支的 OpenWrt 源码与从 [main 的固定提交](https://github.com/lyleee0083/route-rules/commit/165604a4966318c911349e1f48432ac7e44e9385) 取出的规则、配置和编译器放入独立构建目录，然后运行 Go 控制器与 shell 回归测试，只生成所需的 Linux 客户端快照、生成 MosDNS JSON 配置并编译 `.mdrs` 域名规则，再派生 nftables 策略、交叉构建 ARM64 控制器并核对整个 ZIP。CI 还在本机环回中验证 MosDNS 行为。更新共享源码时，在工作流中修改 `ROUTE_RULES_MAIN_REVISION`，并重新运行 BE7000 测试。真实路由器的启动、nftables 接管与 LAN 转发需另行验收。
 
 ## 仓库结构
 
@@ -48,4 +48,4 @@ sha256sum -c SHA256SUMS
 
 ## 许可证
 
-共享规则与 sing-box 的许可证见 [main 的第三方来源](https://github.com/lyleee0083/route-rules/blob/d1a3bd6041c5ce7467253f6dd62bc06e025d7497/docs/THIRD-PARTY.md)。MosDNS 0.0.2 的上游许可见 [MosDNS v5 源码及许可证](https://github.com/IrineSistiana/mosdns/tree/9cfb7ce985599c087cb7ccfb1531d0c0f4021242)。
+共享规则与 sing-box 的许可证见 [main 的第三方来源](https://github.com/lyleee0083/route-rules/blob/165604a4966318c911349e1f48432ac7e44e9385/docs/THIRD-PARTY.md)。MosDNS 0.0.2 的上游许可见 [MosDNS v5 源码及许可证](https://github.com/IrineSistiana/mosdns/tree/9cfb7ce985599c087cb7ccfb1531d0c0f4021242)。

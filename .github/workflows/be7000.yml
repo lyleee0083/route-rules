@@ -35,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
-      ROUTE_RULES_MAIN_REVISION: d1a3bd6041c5ce7467253f6dd62bc06e025d7497
+      ROUTE_RULES_MAIN_REVISION: 165604a4966318c911349e1f48432ac7e44e9385
     defaults:
       run:
         shell: pwsh
@@ -57,8 +57,8 @@ jobs:
           shared_revision=$(git -C .shared-main rev-parse HEAD)
           test "$shared_revision" = "$ROUTE_RULES_MAIN_REVISION"
           mkdir -- build
-          git -C .shared-main archive "$shared_revision" config routing scripts src | tar -x -C build
-          git archive HEAD openwrt VERSION | tar -x -C build
+          git -C .shared-main archive "$shared_revision" config routing scripts src | tar -xf - -C build
+          git archive HEAD openwrt VERSION | tar -xf - -C build
           echo "Shared route-rules source from main: $shared_revision"
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
