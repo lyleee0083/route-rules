@@ -10,8 +10,8 @@
 
 ## 快速开始
 
-1. 从 [Xiaomi BE7000 工作流](https://github.com/lyleee0083/route-rules/actions/workflows/be7000.yml) 的成功运行下载 `route-rules-xiaomi-be7000-v<版本>`，按 `SHA256SUMS.txt` 核对内部 ZIP。
-2. 在私有目录解压内部 ZIP。在 `config.json` 的 `proxy` 出站填写自己的 VLESS REALITY 节点，并更新包内 `SHA256SUMS` 中 `config.json` 的摘要。
+1. 从 [GitHub Releases](https://github.com/lyleee0083/route-rules/releases) 下载 `route-rules-xiaomi-be7000-v<版本>.zip` 和 `SHA256SUMS.txt`，核对 ZIP。
+2. 在私有目录解压 ZIP。在 `config.json` 的 `proxy` 出站填写自己的 VLESS REALITY 节点，并更新包内 `SHA256SUMS` 中 `config.json` 的摘要。
 3. 目标需要 ARM64 OpenWrt、fw4、nftables 和可用的 TUN。全新安装与激活入口分别为 `sh install.sh --install-authorized` 和 `sh activate.sh --activate-authorized`。已有安装应先按对应版本的迁移流程核对，安装程序会拒绝覆盖。
 
 在解压目录配置完节点后，用下列命令更新配置摘要，并核验整个载荷。
@@ -34,7 +34,7 @@ sha256sum -c SHA256SUMS
 
 ## 构建与测试
 
-[BE7000 工作流](../.github/workflows/be7000.yml)在 ubuntu-latest 运行 Go 控制器与 shell 回归测试，生成 Linux 客户端快照、派生 mosdns 和 nftables 策略、交叉构建 ARM64 控制器并核对整个 ZIP。CI 还在本机环回中验证 mosdns 行为。真实路由器的启动、nftables 接管与 LAN 转发需另行验收。
+[BE7000 工作流](../.github/workflows/be7000.yml)在 ubuntu-latest 运行 Go 控制器与 shell 回归测试，只生成所需的 Linux 客户端快照、派生 mosdns 和 nftables 策略、交叉构建 ARM64 控制器并核对整个 ZIP。CI 还在本机环回中验证 mosdns 行为。真实路由器的启动、nftables 接管与 LAN 转发需另行验收。
 
 ## 仓库结构
 
@@ -44,7 +44,7 @@ sha256sum -c SHA256SUMS
 
 ## 版本发布
 
-运行工件附有 `SHA256SUMS.txt` 和 `build-info.json`，记录包哈希、构建提交、规则输入及双核心校验值。
+发布资产包含运行 ZIP 和 `SHA256SUMS.txt`。ZIP 内的 `SHA256SUMS` 供安装、控制器和回滚逐项校验。构建提交、规则输入与双核心校验值记录在单独的 Actions 构建信息工件。
 
 ## 许可证
 

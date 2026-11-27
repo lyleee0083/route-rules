@@ -17,7 +17,7 @@ $openWrtRoot=Split-Path -Parent $PSScriptRoot
 $projectRoot=Split-Path -Parent $openWrtRoot
 $scriptsRoot=Join-Path $openWrtRoot 'scripts'
 $canonicalSourceRoot=Join-Path $openWrtRoot 'inputs/linux'
-$canonicalLinuxArchive=Join-Path $projectRoot 'generated/sing-box-configs.zip'
+$canonicalLinuxArchive=Join-Path $projectRoot 'outputs/openwrt-client/sing-box-configs.zip'
 if ([string]::IsNullOrWhiteSpace($SourceRoot) -xor [string]::IsNullOrWhiteSpace($LinuxArchivePath)) { throw 'SourceRoot and LinuxArchivePath must be supplied together.' }
 if ([string]::IsNullOrWhiteSpace($SourceRoot)) { $SourceRoot=$canonicalSourceRoot; $LinuxArchivePath=$canonicalLinuxArchive }
 if (-not [IO.Directory]::Exists($SourceRoot) -or -not [IO.File]::Exists($LinuxArchivePath)) { throw 'Publication test source snapshot and Linux archive must both exist.' }

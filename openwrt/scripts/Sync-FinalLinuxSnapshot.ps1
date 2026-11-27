@@ -7,7 +7,7 @@ $projectRoot = Split-Path -Parent $openWrtRoot
 $sharedScriptsRoot = Join-Path $projectRoot 'scripts'
 $sourceTreeRoot = Join-Path $openWrtRoot 'src'
 $nativeSource = Join-Path $sourceTreeRoot 'native'
-if (-not $LinuxArchivePath) { $LinuxArchivePath=Join-Path (Join-Path $projectRoot 'generated') 'sing-box-configs.zip' }
+if (-not $LinuxArchivePath) { $LinuxArchivePath=Join-Path $projectRoot 'outputs/openwrt-client/sing-box-configs.zip' }
 if (-not $SourceRoot) { $SourceRoot=Join-Path (Join-Path $openWrtRoot 'inputs') 'linux' }
 . (Join-Path $sharedScriptsRoot 'Direct-RoutingPolicy.ps1')
 . (Join-Path $PSScriptRoot 'Final-LinuxSnapshot.ps1')

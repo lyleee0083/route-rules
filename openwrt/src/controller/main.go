@@ -18,7 +18,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -226,15 +225,12 @@ func atomicWrite(path string, data []byte) error {
 	if err = os.Rename(path+".write", path); err != nil {
 		return err
 	}
-	if runtime.GOOS != "windows" {
-		dir, e := os.Open(filepath.Dir(path))
-		if e != nil {
-			return e
-		}
-		defer dir.Close()
-		return dir.Sync()
+	dir, err := os.Open(filepath.Dir(path))
+	if err != nil {
+		return err
 	}
-	return nil
+	defer dir.Close()
+	return dir.Sync()
 }
 func (c *controller) save(j *journal) error {
 	data, err := json.MarshalIndent(j, "", "  ")
