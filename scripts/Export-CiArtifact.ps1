@@ -17,7 +17,7 @@ if (($Component -eq 'xiaomi-be7000') -ne [bool]$BuildManifestPath) {
     throw 'The BE7000 build must provide its package manifest.'
 }
 
-$name = "route-rules-$Component-v$version"
+$name = "route-rules-$version"
 $artifactRoot = Join-Path $root "outputs/ci-artifacts/$name"
 $packageName = "$name.zip"
 $package = Join-Path $artifactRoot $packageName
