@@ -35,7 +35,8 @@ jobs:
           ./tests/Test-ConfigArchive.ps1
       - name: Generate and verify the five client profiles
         run: |
-          ./scripts/Generate-SingBoxConfig.ps1 -All -RequireSingBox
+          $zstd = ./scripts/Get-CiZstd.ps1
+          ./scripts/Generate-SingBoxConfig.ps1 -All -RequireSingBox -ZstdLibraryPath $zstd
           ./tests/Test-PublishedRoutingPolicy.ps1 -ArchivePath generated/sing-box-configs.zip
       - name: Prepare the versioned artifact
         id: artifact

@@ -14,3 +14,5 @@
 
 - [sing-box v1.14.4 源码及许可证](https://github.com/SagerNet/sing-box/tree/v1.14.4)
 - [mosdns v5.3.4 源码及许可证](https://github.com/IrineSistiana/mosdns/tree/v5.3.4)
+
+- [Zstandard v1.6.0 源码及许可证](https://github.com/meta/zstd/tree/v1.6.0)，用于 Actions 解码 MRS。
