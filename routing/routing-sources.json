@@ -1,0 +1,712 @@
+{
+  "version": 2,
+  "conflict_policy": {
+    "earlier_rule": "wins",
+    "later_overlap": "ordered-first-match"
+  },
+  "resources": [
+    {
+      "tag": "217heidai-adblock-dns",
+      "type": "remote",
+      "format": "adguard-dns",
+      "url": "https://github.com/217heidai/adblockfilters/releases/download/rule/adblockdns.txt"
+    },
+    {
+      "tag": "loyalsoldier-geosite",
+      "type": "remote",
+      "format": "geosite-dat",
+      "url": "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
+    },
+    {
+      "tag": "loyalsoldier-geoip",
+      "type": "remote",
+      "format": "geoip-dat",
+      "url": "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
+    },
+    {
+      "tag": "aethersailor-direct-domain",
+      "type": "remote",
+      "format": "mrs-domain",
+      "url": "https://raw.githubusercontent.com/Aethersailor/Custom_OpenClash_Rules/main/rule/Custom_Direct_Domain.mrs"
+    },
+    {
+      "tag": "aethersailor-direct-ip",
+      "type": "remote",
+      "format": "mrs-ipcidr",
+      "url": "https://raw.githubusercontent.com/Aethersailor/Custom_OpenClash_Rules/main/rule/Custom_Direct_IP.mrs"
+    },
+    {
+      "tag": "aethersailor-direct-port",
+      "type": "remote",
+      "format": "clash-yaml",
+      "url": "https://raw.githubusercontent.com/Aethersailor/Custom_OpenClash_Rules/main/rule/Custom_Direct_Classical_Port.yaml"
+    },
+    {
+      "tag": "aethersailor-proxy-domain",
+      "type": "remote",
+      "format": "mrs-domain",
+      "url": "https://raw.githubusercontent.com/Aethersailor/Custom_OpenClash_Rules/main/rule/Custom_Proxy_Domain.mrs"
+    },
+    {
+      "tag": "aethersailor-proxy-ip",
+      "type": "remote",
+      "format": "mrs-ipcidr",
+      "url": "https://raw.githubusercontent.com/Aethersailor/Custom_OpenClash_Rules/main/rule/Custom_Proxy_IP.mrs"
+    },
+    {
+      "tag": "aethersailor-steam-cdn-domain",
+      "type": "remote",
+      "format": "mrs-domain",
+      "url": "https://raw.githubusercontent.com/Aethersailor/Custom_OpenClash_Rules/main/rule/Steam_CDN_Domain.mrs"
+    },
+    {
+      "tag": "aethersailor-steam-cdn-ip",
+      "type": "remote",
+      "format": "mrs-ipcidr",
+      "url": "https://raw.githubusercontent.com/Aethersailor/Custom_OpenClash_Rules/main/rule/Steam_CDN_IP.mrs"
+    },
+    {
+      "tag": "aethersailor-port-direct",
+      "type": "remote",
+      "format": "clash-yaml",
+      "url": "https://raw.githubusercontent.com/Aethersailor/Custom_OpenClash_Rules/main/rule/Custom_Port_Direct.yaml"
+    },
+    {
+      "tag": "clang-cn-ipnetdb",
+      "type": "remote",
+      "format": "plain",
+      "url": "https://ispip.clang.cn/all_cn.txt"
+    },
+    {
+      "tag": "clang-cn-apnic",
+      "type": "remote",
+      "format": "plain",
+      "url": "https://ispip.clang.cn/all_cn_apnic.txt"
+    },
+    {
+      "tag": "felixonmars-cn-domains",
+      "type": "remote",
+      "format": "dnsmasq",
+      "url": "https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/accelerated-domains.china.conf"
+    }
+  ],
+  "rules": [
+    {
+      "id": "static-reject",
+      "action": "reject",
+      "inputs": [
+        {
+          "type": "local",
+          "format": "source",
+          "path": "static-reject.json"
+        }
+      ]
+    },
+    {
+      "id": "remote-reject-217heidai",
+      "action": "reject",
+      "inputs": [
+        {
+          "resource": "217heidai-adblock-dns"
+        }
+      ]
+    },
+    {
+      "id": "static-direct-domain",
+      "action": "direct",
+      "inputs": [
+        {
+          "type": "local",
+          "format": "source",
+          "path": "static-direct-domain.json"
+        }
+      ]
+    },
+    {
+      "id": "static-direct-ip",
+      "action": "direct",
+      "inputs": [
+        {
+          "type": "local",
+          "format": "source",
+          "path": "static-direct-ip.json"
+        }
+      ]
+    },
+    {
+      "id": "static-direct-port",
+      "action": "direct",
+      "inputs": [
+        {
+          "type": "local",
+          "format": "source",
+          "path": "static-direct-port.json"
+        }
+      ]
+    },
+    {
+      "id": "static-proxy-domain",
+      "action": "proxy",
+      "inputs": [
+        {
+          "type": "local",
+          "format": "source",
+          "path": "static-proxy-domain.json"
+        }
+      ]
+    },
+    {
+      "id": "static-proxy-ip",
+      "action": "proxy",
+      "inputs": [
+        {
+          "type": "local",
+          "format": "source",
+          "path": "static-proxy-ip.json"
+        }
+      ]
+    },
+    {
+      "id": "static-proxy-port",
+      "action": "proxy",
+      "inputs": [
+        {
+          "type": "local",
+          "format": "source",
+          "path": "static-proxy-port.json"
+        }
+      ]
+    },
+    {
+      "id": "01-private-domain",
+      "action": "direct",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "private"
+        }
+      ]
+    },
+    {
+      "id": "02-private-ip",
+      "action": "direct",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geoip",
+          "selector": "private"
+        }
+      ]
+    },
+    {
+      "id": "03-custom-direct-domain-cn",
+      "action": "direct",
+      "inputs": [
+        {
+          "resource": "aethersailor-direct-domain"
+        },
+        {
+          "resource": "felixonmars-cn-domains"
+        }
+      ]
+    },
+    {
+      "id": "04-custom-direct-ip-cn",
+      "action": "direct",
+      "inputs": [
+        {
+          "resource": "aethersailor-direct-ip"
+        },
+        {
+          "resource": "clang-cn-ipnetdb"
+        },
+        {
+          "resource": "clang-cn-apnic"
+        }
+      ]
+    },
+    {
+      "id": "05-custom-direct-port",
+      "action": "direct",
+      "inputs": [
+        {
+          "resource": "aethersailor-direct-port"
+        }
+      ]
+    },
+    {
+      "id": "06-custom-proxy-domain",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "aethersailor-proxy-domain"
+        }
+      ]
+    },
+    {
+      "id": "07-custom-proxy-ip",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "aethersailor-proxy-ip"
+        }
+      ]
+    },
+    {
+      "id": "08-google-cn",
+      "action": "direct",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "google-cn"
+        }
+      ]
+    },
+    {
+      "id": "09-games-cn",
+      "action": "direct",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "category-games@cn"
+        }
+      ]
+    },
+    {
+      "id": "10-steam-cdn-domain",
+      "action": "direct",
+      "inputs": [
+        {
+          "resource": "aethersailor-steam-cdn-domain"
+        }
+      ]
+    },
+    {
+      "id": "11-steam-cdn-ip",
+      "action": "direct",
+      "inputs": [
+        {
+          "resource": "aethersailor-steam-cdn-ip"
+        }
+      ]
+    },
+    {
+      "id": "12-game-platform-download",
+      "action": "direct",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "category-game-platforms-download"
+        }
+      ]
+    },
+    {
+      "id": "13-public-tracker",
+      "action": "direct",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "category-public-tracker"
+        }
+      ]
+    },
+    {
+      "id": "14-communication",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "category-communication"
+        }
+      ]
+    },
+    {
+      "id": "15-social-media-non-cn",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "category-social-media-!cn"
+        }
+      ]
+    },
+    {
+      "id": "16-talkatone",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "talkatone"
+        }
+      ]
+    },
+    {
+      "id": "17-openai",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "openai"
+        }
+      ]
+    },
+    {
+      "id": "18-onedrive",
+      "action": "direct",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "onedrive"
+        }
+      ]
+    },
+    {
+      "id": "19-bing",
+      "action": "direct",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "bing"
+        }
+      ]
+    },
+    {
+      "id": "20-ai-non-cn",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "category-ai-!cn"
+        }
+      ]
+    },
+    {
+      "id": "21-github",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "github"
+        }
+      ]
+    },
+    {
+      "id": "22-speedtest",
+      "action": "direct",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "category-speedtest"
+        }
+      ]
+    },
+    {
+      "id": "23-steam",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "steam"
+        }
+      ]
+    },
+    {
+      "id": "24-youtube",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "youtube"
+        }
+      ]
+    },
+    {
+      "id": "25-apple-tvplus",
+      "action": "direct",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "apple-tvplus"
+        }
+      ]
+    },
+    {
+      "id": "26-apple",
+      "action": "direct",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "apple"
+        }
+      ]
+    },
+    {
+      "id": "27-microsoft",
+      "action": "direct",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "microsoft"
+        }
+      ]
+    },
+    {
+      "id": "28-googlefcm",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "googlefcm"
+        }
+      ]
+    },
+    {
+      "id": "29-google",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "google"
+        }
+      ]
+    },
+    {
+      "id": "30-tiktok",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "tiktok"
+        }
+      ]
+    },
+    {
+      "id": "31-netflix",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "netflix"
+        }
+      ]
+    },
+    {
+      "id": "32-disney",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "disney"
+        }
+      ]
+    },
+    {
+      "id": "33-hbo",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "hbo"
+        }
+      ]
+    },
+    {
+      "id": "34-primevideo",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "primevideo"
+        }
+      ]
+    },
+    {
+      "id": "35-emby",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "category-emby"
+        }
+      ]
+    },
+    {
+      "id": "36-spotify",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "spotify"
+        }
+      ]
+    },
+    {
+      "id": "37-bahamut",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "bahamut"
+        }
+      ]
+    },
+    {
+      "id": "38-games",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "category-games"
+        }
+      ]
+    },
+    {
+      "id": "39-entertainment",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "category-entertainment"
+        }
+      ]
+    },
+    {
+      "id": "40-pt",
+      "action": "direct",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "category-pt"
+        }
+      ]
+    },
+    {
+      "id": "41-paypal",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "paypal"
+        }
+      ]
+    },
+    {
+      "id": "42-ecommerce",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "category-ecommerce"
+        }
+      ]
+    },
+    {
+      "id": "43-cryptocurrency",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "category-cryptocurrency"
+        }
+      ]
+    },
+    {
+      "id": "44-gfw",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "gfw"
+        }
+      ]
+    },
+    {
+      "id": "45-telegram-ip",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geoip",
+          "selector": "telegram"
+        }
+      ]
+    },
+    {
+      "id": "46-twitter-ip",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geoip",
+          "selector": "twitter"
+        }
+      ]
+    },
+    {
+      "id": "47-facebook-ip",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geoip",
+          "selector": "facebook"
+        }
+      ]
+    },
+    {
+      "id": "48-google-ip",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geoip",
+          "selector": "google"
+        }
+      ]
+    },
+    {
+      "id": "49-netflix-ip",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geoip",
+          "selector": "netflix"
+        }
+      ]
+    },
+    {
+      "id": "50-geolocation-non-cn",
+      "action": "proxy",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "geolocation-!cn"
+        }
+      ]
+    },
+    {
+      "id": "51-cn-domain",
+      "action": "direct",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geosite",
+          "selector": "cn"
+        }
+      ]
+    },
+    {
+      "id": "52-cn-ip",
+      "action": "direct",
+      "inputs": [
+        {
+          "resource": "loyalsoldier-geoip",
+          "selector": "cn"
+        }
+      ]
+    },
+    {
+      "id": "53-custom-port-direct",
+      "action": "direct",
+      "inputs": [
+        {
+          "resource": "aethersailor-port-direct"
+        }
+      ]
+    }
+  ]
+}

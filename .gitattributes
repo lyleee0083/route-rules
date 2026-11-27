@@ -1,0 +1,5 @@
+* text=auto
+*.ps1 text
+*.sh text eol=lf
+*.init text eol=lf
+*.nft text eol=lf

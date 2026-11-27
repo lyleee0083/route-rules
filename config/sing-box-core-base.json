@@ -1,0 +1,273 @@
+{
+  "log": {
+    "level": "warn",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+        "type": "https",
+        "tag": "dns-direct",
+        "server": "dns.alidns.com",
+        "server_port": 443,
+        "path": "/dns-query",
+        "headers": {
+          "Host": "dns.alidns.com"
+        },
+        "tls": {
+          "enabled": true,
+          "server_name": "dns.alidns.com"
+        },
+        "detour": "dns-direct-out",
+        "domain_resolver": {
+          "server": "dns-doh-hosts",
+          "strategy": "ipv4_only",
+          "timeout": "5s"
+        }
+      },
+      {
+        "type": "https",
+        "tag": "dns-direct-backup",
+        "server": "doh.pub",
+        "server_port": 443,
+        "path": "/dns-query",
+        "headers": {
+          "Host": "doh.pub"
+        },
+        "tls": {
+          "enabled": true,
+          "server_name": "doh.pub"
+        },
+        "detour": "dns-direct-out",
+        "domain_resolver": {
+          "server": "dns-doh-hosts",
+          "strategy": "ipv4_only",
+          "timeout": "5s"
+        }
+      },
+      {
+        "type": "https",
+        "tag": "dns-proxy",
+        "server": "cloudflare-dns.com",
+        "server_port": 443,
+        "path": "/dns-query",
+        "headers": {
+          "Host": "cloudflare-dns.com"
+        },
+        "tls": {
+          "enabled": true,
+          "server_name": "cloudflare-dns.com"
+        },
+        "detour": "dns-proxy-out",
+        "domain_resolver": {
+          "server": "dns-doh-hosts",
+          "strategy": "ipv4_only",
+          "timeout": "8s"
+        }
+      },
+      {
+        "type": "https",
+        "tag": "dns-proxy-backup",
+        "server": "dns.google",
+        "server_port": 443,
+        "path": "/dns-query",
+        "headers": {
+          "Host": "dns.google"
+        },
+        "tls": {
+          "enabled": true,
+          "server_name": "dns.google"
+        },
+        "detour": "dns-proxy-out",
+        "domain_resolver": {
+          "server": "dns-doh-hosts",
+          "strategy": "ipv4_only",
+          "timeout": "8s"
+        }
+      },
+      {
+        "type": "udp",
+        "tag": "dns-node",
+        "server": "127.0.0.1",
+        "server_port": 15354,
+        "inet4_bind_address": "127.0.0.1"
+      },
+      {
+        "type": "hosts",
+        "tag": "dns-doh-hosts",
+        "predefined": {
+          "dns.alidns.com": [
+            "223.5.5.5"
+          ],
+          "doh.pub": [
+            "120.53.53.53"
+          ],
+          "cloudflare-dns.com": [
+            "1.1.1.1"
+          ],
+          "dns.google": [
+            "8.8.8.8"
+          ]
+        }
+      }
+    ],
+    "rules": [
+      {
+        "query_type": [
+          "AAAA"
+        ],
+        "action": "reject",
+        "no_drop": true
+      },
+      {
+        "inbound": [
+          "dns-in"
+        ],
+        "action": "route-options",
+        "disable_cache": true,
+        "disable_optimistic_cache": true
+      },
+      {
+        "inbound": [
+          "dns-in"
+        ],
+        "action": "evaluate",
+        "server": "dns-direct",
+        "tag": "node-ali-response",
+        "timeout": "2s"
+      },
+      {
+        "inbound": [
+          "dns-in"
+        ],
+        "match_response": "node-ali-response",
+        "response_rcode": "NOERROR",
+        "action": "respond"
+      },
+      {
+        "inbound": [
+          "dns-in"
+        ],
+        "match_response": "node-ali-response",
+        "response_rcode": "NXDOMAIN",
+        "action": "respond"
+      },
+      {
+        "inbound": [
+          "dns-in"
+        ],
+        "action": "route",
+        "server": "dns-direct-backup",
+        "timeout": "3s"
+      }
+    ],
+    "final": "dns-proxy",
+    "strategy": "ipv4_only",
+    "timeout": "8s",
+    "cache_capacity": 65472,
+    "optimistic": {
+      "enabled": true,
+      "timeout": "1h"
+    },
+    "reverse_mapping": false
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "address": [
+        "172.28.255.1/30"
+      ],
+      "mtu": 4064,
+      "dns_mode": "hijack",
+      "auto_route": true,
+      "strict_route": false,
+      "stack": "gvisor",
+      "udp_timeout": "5m",
+      "udp_mapping": "endpoint_independent",
+      "udp_filtering": "endpoint_independent",
+      "udp_nat_max": 4096
+    },
+    {
+      "type": "direct",
+      "tag": "dns-in",
+      "listen": "127.0.0.1",
+      "listen_port": 15354
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "vless",
+      "tag": "proxy",
+      "server": "node.example.invalid",
+      "server_port": 443,
+      "uuid": "11111111-1111-4111-8111-111111111111",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "tls.example.invalid",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "CQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "short_id": "0123456789abcdef"
+        }
+      },
+      "domain_resolver": {
+        "server": "dns-node",
+        "disable_cache": false,
+        "rewrite_ttl": 3600,
+        "disable_optimistic_cache": true,
+        "timeout": "5s"
+      },
+      "connect_timeout": "8s"
+    },
+    {
+      "type": "selector",
+      "tag": "dns-proxy-out",
+      "outbounds": [
+        "proxy"
+      ],
+      "default": "proxy"
+    },
+    {
+      "type": "selector",
+      "tag": "dns-direct-out",
+      "outbounds": [
+        "direct"
+      ],
+      "default": "direct"
+    },
+    {
+      "type": "direct",
+      "tag": "direct",
+      "connect_timeout": "5s"
+    }
+  ],
+  "route": {
+    "final": "proxy",
+    "auto_detect_interface": true,
+    "default_domain_resolver": {
+      "server": "dns-proxy",
+      "strategy": "ipv4_only",
+      "timeout": "8s"
+    },
+    "rules": [
+      {
+        "ip_version": 6,
+        "action": "reject",
+        "method": "default",
+        "no_drop": true
+      },
+      {
+        "action": "hijack-dns",
+        "inbound": [
+          "dns-in"
+        ]
+      }
+    ]
+  }
+}
