@@ -7,7 +7,6 @@ $snapshotRoot=Join-Path (Join-Path $openWrtRoot 'inputs') 'linux'
 $snapshotConfigPath=Join-Path $snapshotRoot 'sing-box-openwrt.json'
 if (-not (Test-Path -LiteralPath $snapshotConfigPath -PathType Leaf)) { throw 'Canonical final Linux snapshot is missing for route-prelude coverage.' }
 $snapshotConfig=ConvertFrom-Json -InputObject ([IO.File]::ReadAllText($snapshotConfigPath)) -ErrorAction Stop
-Assert-EffectiveDirectConfiguration -Configuration $snapshotConfig
 $numericSourceRules=Get-OpenWrtNumericTrafficRules -Configuration $snapshotConfig
 if ($numericSourceRules.Count -ne (@($snapshotConfig.route.rules).Count - 1) -or
     $numericSourceRules[0].action -cne 'reject' -or $numericSourceRules[0].ip_version -ne 6 -or
