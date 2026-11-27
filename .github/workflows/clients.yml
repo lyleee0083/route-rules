@@ -26,8 +26,8 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-user-static binfmt-support
-          sudo update-binfmts --enable qemu-aarch64
+          sudo apt-get install -y qemu-user-binfmt
+          sudo systemctl restart systemd-binfmt
           test -f /proc/sys/fs/binfmt_misc/qemu-aarch64
       - name: Install the pinned project sing-box build checker
         run: |
