@@ -13,7 +13,7 @@ permissions:
 jobs:
   client-build:
     name: Client rules and configurations
-    runs-on: windows-2025
+    runs-on: ubuntu-latest
     timeout-minutes: 35
     defaults:
       run:
@@ -27,7 +27,6 @@ jobs:
           . ./scripts/Official-Cores.ps1
           $null = Install-OpenWrtBuildCores -Platforms sing-box-check
       - name: Test routing and archive contracts
-        shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           ./tests/Test-RoutingRuleCompiler.ps1
@@ -35,8 +34,7 @@ jobs:
           ./tests/Test-ConfigArchive.ps1
       - name: Generate and verify the five client profiles
         run: |
-          $zstd = ./scripts/Get-CiZstd.ps1
-          ./scripts/Generate-SingBoxConfig.ps1 -All -RequireSingBox -ZstdLibraryPath $zstd
+          ./scripts/Generate-SingBoxConfig.ps1 -All -RequireSingBox
           ./tests/Test-PublishedRoutingPolicy.ps1 -ArchivePath generated/sing-box-configs.zip
       - name: Prepare the versioned artifact
         id: artifact

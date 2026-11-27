@@ -98,6 +98,6 @@ try {
 }
 finally {
     $resolved=[IO.Path]::GetFullPath($testRoot)
-    if ((Split-Path -Parent $resolved) -ne ([IO.Path]::GetTempPath()).TrimEnd('\') -or (Split-Path -Leaf $resolved) -notlike 'sing-box-zip-test-*') { throw 'Unsafe ZIP test cleanup path.' }
+    if ((Split-Path -Parent $resolved) -ne ([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar) -or (Split-Path -Leaf $resolved) -notlike 'sing-box-zip-test-*') { throw 'Unsafe ZIP test cleanup path.' }
     Remove-Item -LiteralPath $resolved -Recurse -Force
 }

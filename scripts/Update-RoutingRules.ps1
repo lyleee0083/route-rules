@@ -481,7 +481,7 @@ function Invoke-RoutingResourceFetches {
     }
     $fetchRoot = Join-Path $CacheRoot ('.routing-fetch-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $fetchRoot -Force | Out-Null
-    $curlCommand = Get-Command 'curl.exe' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    $curlCommand = Get-Command $(if ([IO.Path]::DirectorySeparatorChar -eq [char]'/') { 'curl' } else { 'curl.exe' }) -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     $curlPath = if ($curlCommand) { $curlCommand.Source } else { '' }
     $worker = {
         param([string]$Url, [string]$DownloadPath, [string]$HeaderPath, [string]$CurlPath, [string]$ETag, [string]$LastModified)
@@ -695,7 +695,7 @@ function Get-RemoteSource {
                 try { $metadata = Read-JsonFile $metadataPath } catch { $metadata = $null }
             }
             $canRequestConditionally = $metadata -and $metadata.url -eq $Resource.url -and (Test-Path -LiteralPath $cachePath -PathType Leaf)
-            $curl = Get-Command 'curl.exe' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+            $curl = Get-Command $(if ([IO.Path]::DirectorySeparatorChar -eq [char]'/') { 'curl' } else { 'curl.exe' }) -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($curl) {
                 $arguments = @(
                     '-sS', '-L', '--retry', '3', '--retry-delay', '2', '--max-time', '180',
@@ -863,6 +863,10 @@ function Resolve-ZstdLibrary {
 
     $candidates = [System.Collections.Generic.List[string]]::new()
     if ($RequestedPath) { $candidates.Add($RequestedPath) }
+    if ([IO.Path]::DirectorySeparatorChar -eq [char]'/') {
+        $candidates.Add('/usr/lib/x86_64-linux-gnu/libzstd.so.1')
+        $candidates.Add('/usr/lib/aarch64-linux-gnu/libzstd.so.1')
+    }
     $candidates.Add((Join-Path $script:ProjectRoot 'tools\libzstd.dll'))
     $candidates.Add('C:\Program Files\Git\mingw64\bin\libzstd.dll')
     $candidates.Add('C:\Program Files (x86)\Git\mingw64\bin\libzstd.dll')
@@ -877,7 +881,7 @@ function Resolve-ZstdLibrary {
             return (Resolve-Path -LiteralPath $candidate).Path
         }
     }
-    throw '解析 MRS 需要 libzstd.dll。请安装 Git for Windows，或使用 -ZstdLibraryPath 指定该文件。'
+    throw '解析 MRS 需要 Zstandard 动态库。请安装 Linux libzstd1 或使用 -ZstdLibraryPath 指定动态库。'
 }
 
 function Initialize-MrsReader {
@@ -908,15 +912,33 @@ public static class RoutingMrsReader {
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool FreeLibrary(IntPtr module);
 
+    [DllImport("libdl.so.2", CallingConvention = CallingConvention.Cdecl)]
+    private static extern IntPtr dlopen(string path, int flags);
+
+    [DllImport("libdl.so.2", CallingConvention = CallingConvention.Cdecl)]
+    private static extern IntPtr dlsym(IntPtr module, string name);
+
+    [DllImport("libdl.so.2", CallingConvention = CallingConvention.Cdecl)]
+    private static extern int dlclose(IntPtr module);
+
+    private static readonly bool IsLinux = Environment.OSVersion.Platform == PlatformID.Unix;
+    private const int ResolveAllSymbols = 2;
+
     private static IntPtr GetRequiredExport(IntPtr library, string name) {
-        IntPtr address = GetProcAddress(library, name);
-        if (address == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error(), "找不到 Zstandard 导出函数：" + name);
+        IntPtr address = IsLinux ? dlsym(library, name) : GetProcAddress(library, name);
+        if (address == IntPtr.Zero) {
+            if (!IsLinux) throw new Win32Exception(Marshal.GetLastWin32Error(), "找不到 Zstandard 导出函数：" + name);
+            throw new EntryPointNotFoundException("找不到 Zstandard 导出函数：" + name);
+        }
         return address;
     }
 
     private static byte[] Decompress(string libraryPath, byte[] data) {
-        IntPtr library = LoadLibraryW(libraryPath);
-        if (library == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error(), "无法加载 Zstandard 动态库：" + libraryPath);
+        IntPtr library = IsLinux ? dlopen(libraryPath, ResolveAllSymbols) : LoadLibraryW(libraryPath);
+        if (library == IntPtr.Zero) {
+            if (!IsLinux) throw new Win32Exception(Marshal.GetLastWin32Error(), "无法加载 Zstandard 动态库：" + libraryPath);
+            throw new DllNotFoundException("无法加载 Zstandard 动态库：" + libraryPath);
+        }
         IntPtr source = IntPtr.Zero;
         IntPtr destination = IntPtr.Zero;
         try {
@@ -939,7 +961,8 @@ public static class RoutingMrsReader {
         finally {
             if (source != IntPtr.Zero) Marshal.FreeHGlobal(source);
             if (destination != IntPtr.Zero) Marshal.FreeHGlobal(destination);
-            if (library != IntPtr.Zero) FreeLibrary(library);
+            if (IsLinux) dlclose(library);
+            else FreeLibrary(library);
         }
     }
 
