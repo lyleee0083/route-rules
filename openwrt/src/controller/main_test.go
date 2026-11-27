@@ -64,6 +64,9 @@ func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	root := t.TempDir()
 	state := t.TempDir()
+	if err := os.Chmod(state, 0700); err != nil {
+		t.Fatal(err)
+	}
 	policy, err := os.ReadFile(filepath.Join("..", "native", "policy.template.nft"))
 	if err != nil {
 		t.Fatal(err)
