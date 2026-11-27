@@ -7,7 +7,7 @@ $snapshotRoot=Join-Path (Join-Path $openWrtRoot 'inputs') 'linux'
 $snapshotConfigPath=Join-Path $snapshotRoot 'sing-box-openwrt.json'
 if (-not (Test-Path -LiteralPath $snapshotConfigPath -PathType Leaf)) { throw 'Canonical final Linux snapshot is missing for route-prelude coverage.' }
 $snapshotConfig=ConvertFrom-Json -InputObject ([IO.File]::ReadAllText($snapshotConfigPath)) -ErrorAction Stop
-if (@($snapshotConfig.dns.rules).Count -ne 13) { throw 'Canonical node-DNS fixture must contain the exact 13-rule source shape.' }
+Assert-EffectiveDirectConfiguration -Configuration $snapshotConfig
 $numericSourceRules=Get-OpenWrtNumericTrafficRules -Configuration $snapshotConfig
 if ($numericSourceRules.Count -ne (@($snapshotConfig.route.rules).Count - 1) -or
     $numericSourceRules[0].action -cne 'reject' -or $numericSourceRules[0].ip_version -ne 6 -or
@@ -199,4 +199,4 @@ foreach ($invalid in @([pscustomobject]@{domain_suffix=@('example.test')},[pscus
 }
 if (@([regex]::Matches($text,'(?m)^    set ')).Count -ne 4 -or $text -match '__SB_NETWORKS__|__SB_DPORTS__|__SB_SPORTS__|iptables|ipset|nfqueue|multi_queue' -or
     @([regex]::Matches($text,'__SB_LAN_PREFIXES__')).Count -ne 1) { throw 'Invalid static nft program or leaked legacy/unreleased feature.' }
-Write-Output ('nft compiler passed: '+$cases+' independent serialized IPv4/port decisions; '+$connmarkCases+' generated connmark evaluations across both branches, all four prior owned-bit values and six retained-bit patterns; '+$eligibilityCases.Count+' connection-state eligibility cases; exact 13-rule DNS source shape preserved while removing one dns-in hijack, '+$malformedHijackCases.Count+' malformed hijack fixtures rejected; optional boot-gated cache shape, /0, empty sets and rejected lossy inputs. Target nft grammar/kernel validation remains deferred.')
+Write-Output ('nft compiler passed: '+$cases+' independent serialized IPv4/port decisions; '+$connmarkCases+' generated connmark evaluations across both branches, all four prior owned-bit values and six retained-bit patterns; '+$eligibilityCases.Count+' connection-state eligibility cases; validated DNS source shape while removing one dns-in hijack, '+$malformedHijackCases.Count+' malformed hijack fixtures rejected; optional boot-gated cache shape, /0, empty sets and rejected lossy inputs. Target nft grammar/kernel validation remains deferred.')

@@ -20,8 +20,8 @@ $sourceMutations=@(
     { param($c) $nodeServer=@($c.dns.servers | Where-Object { $_.tag -ceq 'dns-node' })[0];$nodeServer | Add-Member -NotePropertyName detour -NotePropertyValue 'dns-proxy-out' -Force },
     { param($c) $c.inbounds[1].listen='0.0.0.0' },
     { param($c) $c.inbounds+= [pscustomobject]@{type='direct';tag='extra-in';listen='127.0.0.1';listen_port=15356} },
-    { param($c) $c.dns.rules[0].disable_cache=$false },
-    { param($c) $c.dns.rules[1].timeout='3s' },
+    { param($c) $start=Get-ClientDnsBlockRuleCount -Rules @($c.dns.rules); $c.dns.rules[$start].disable_cache=$false },
+    { param($c) $start=Get-ClientDnsBlockRuleCount -Rules @($c.dns.rules); $c.dns.rules[$start+1].timeout='3s' },
     { param($c) $c.route.rules[1].inbound=@('other-inbound') },
     { param($c) $c.outbounds | Where-Object { $_.type -ceq 'vless' } | ForEach-Object { $_.domain_resolver.rewrite_ttl=1800 } },
     { param($c) $c.dns.rules+= [pscustomobject]@{inbound=@('dns-in');action='route';server='dns-direct-backup';timeout='3s'} }
