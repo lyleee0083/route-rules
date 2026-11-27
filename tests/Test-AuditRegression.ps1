@@ -7,7 +7,7 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $scriptsRoot = Join-Path $projectRoot 'scripts'
 $configRoot = Join-Path $projectRoot 'config'
-. (Join-Path $scriptsRoot 'Official-SingBoxChecker.ps1')
+. (Join-Path $scriptsRoot 'SingBox-Checker.ps1')
 $SingBoxPath=Resolve-PinnedSingBoxChecker -ProjectRoot $projectRoot -RequestedPath $SingBoxPath
 $fixtureRoot = Join-Path ([IO.Path]::GetTempPath()) ('ar-' + [guid]::NewGuid().ToString('N').Substring(0,24))
 New-Item -ItemType Directory -Path $fixtureRoot -ErrorAction Stop | Out-Null

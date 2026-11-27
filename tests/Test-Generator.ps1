@@ -13,7 +13,7 @@ $configRoot = Join-Path $root 'config'
 . (Join-Path $scriptsRoot 'Direct-RoutingPolicy.ps1')
 . (Join-Path $scriptsRoot 'DNS-BootstrapPolicy.ps1')
 . (Join-Path $scriptsRoot 'Json-Validation.ps1')
-. (Join-Path $scriptsRoot 'Official-SingBoxChecker.ps1')
+. (Join-Path $scriptsRoot 'SingBox-Checker.ps1')
 
 $template = Join-Path $configRoot 'sing-box-core-base.json'
 $generator = Join-Path $scriptsRoot 'Generate-SingBoxConfig.ps1'

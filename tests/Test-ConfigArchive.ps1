@@ -6,7 +6,7 @@ $scriptsRoot = Join-Path $projectRoot 'scripts'
 $configRoot = Join-Path $projectRoot 'config'
 $sourceRoot = Join-Path $projectRoot 'src'
 . (Join-Path $scriptsRoot 'Config-Archive.ps1')
-. (Join-Path $scriptsRoot 'Official-SingBoxChecker.ps1')
+. (Join-Path $scriptsRoot 'SingBox-Checker.ps1')
 $resolvedSingBox = Resolve-PinnedSingBoxChecker -ProjectRoot $projectRoot
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('sing-box-zip-test-' + [guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($testRoot) | Out-Null
@@ -73,8 +73,8 @@ try {
     $copySource=Join-Path $copyRoot 'src'
     $copyOpenWrtScripts=Join-Path $copyRoot 'scripts'
     foreach ($directory in @($copyScripts,$copyConfig,$copySource,$copyOpenWrtScripts)) { [IO.Directory]::CreateDirectory($directory) | Out-Null }
-    foreach ($name in @('Generate-SingBoxConfig.ps1','Build-Transaction.ps1','Json-Validation.ps1','Direct-RoutingPolicy.ps1','SameTypeDirectPolicy.ps1','DNS-BootstrapPolicy.ps1','Node-DnsPolicy.ps1','Config-Archive.ps1','Official-SingBoxChecker.ps1')) { Copy-Item -LiteralPath (Join-Path $scriptsRoot $name) -Destination $copyScripts }
-    Copy-Item -LiteralPath (Join-Path $projectRoot 'scripts\Official-Cores.ps1') -Destination $copyOpenWrtScripts
+    foreach ($name in @('Generate-SingBoxConfig.ps1','Build-Transaction.ps1','Json-Validation.ps1','Direct-RoutingPolicy.ps1','SameTypeDirectPolicy.ps1','DNS-BootstrapPolicy.ps1','Node-DnsPolicy.ps1','Config-Archive.ps1','SingBox-Checker.ps1')) { Copy-Item -LiteralPath (Join-Path $scriptsRoot $name) -Destination $copyScripts }
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'scripts\Core-Assets.ps1') -Destination $copyOpenWrtScripts
     Copy-Item -LiteralPath (Join-Path $sourceRoot 'SameTypeDirectCompiler.cs') -Destination $copySource
     Copy-Item -LiteralPath $template -Destination $copyConfig
     Copy-Item -LiteralPath $profiles -Destination $copyConfig

@@ -64,7 +64,7 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'Direct-RoutingPolicy.ps1')
 . (Join-Path $PSScriptRoot 'SameTypeDirectPolicy.ps1')
 . (Join-Path $PSScriptRoot 'DNS-BootstrapPolicy.ps1')
-. (Join-Path $PSScriptRoot 'Official-SingBoxChecker.ps1')
+. (Join-Path $PSScriptRoot 'SingBox-Checker.ps1')
 
 if (-not $TemplatePath) {
     $TemplatePath = Join-Path (Join-Path $projectRoot 'config') 'sing-box-core-base.json'
