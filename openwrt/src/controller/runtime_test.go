@@ -84,6 +84,7 @@ func TestMosDNSBindingContractRequiresLoopbackMetricsAndExactDNSListeners(t *tes
 		{name: "wildcard metrics interface", text: strings.Replace(string(valid), "127.0.0.1:15357", "0.0.0.0:15357", 1)},
 		{name: "wrong metrics port", text: strings.Replace(string(valid), "127.0.0.1:15357", "127.0.0.1:15358", 1)},
 		{name: "duplicate API section", text: strings.TrimSuffix(string(valid), "}") + `,"api":{"http":"127.0.0.1:15357"}}`},
+		{name: "external include", text: strings.TrimSuffix(string(valid), "}") + `,"include":["outside.json"]}`},
 		{name: "unknown API option", text: strings.Replace(string(valid), `"http":`, `"pprof":`, 1)},
 		{name: "duplicate UDP instead of TCP", text: strings.Replace(string(valid), "tcp_server", "udp_server", 1)},
 		{name: "wildcard DNS listener", text: strings.Replace(string(valid), "127.0.0.1:15353", "0.0.0.0:15353", 1)},

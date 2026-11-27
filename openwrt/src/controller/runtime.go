@@ -423,6 +423,9 @@ func readMosdnsConfig(data []byte) (map[string]any, error) {
 	if err := decodeUniqueStrictJSON(data, &config); err != nil {
 		return nil, err
 	}
+	if _, present := config["include"]; present {
+		return nil, errors.New("mosdns configuration must be self-contained")
+	}
 	api := object(config["api"])
 	if len(api) != 1 || api["http"] != "127.0.0.1:15357" {
 		return nil, errors.New("mosdns metrics API must bind exactly 127.0.0.1:15357")

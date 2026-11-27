@@ -662,6 +662,7 @@ func TestMosdnsPolicyBehavior(t *testing.T) {
 		plugin["args"].(map[string]any)["listen"] = address
 	}
 	api["http"] = apiAddress
+	config["log"].(map[string]any)["level"] = "debug"
 	// Only the dedicated expiry QNAME receives a short test-only TTL override.
 	node := policyPlugin(t, config, "node_sequence")
 	var ttlOverrides int
@@ -783,12 +784,14 @@ func TestMosdnsPolicyBehavior(t *testing.T) {
 	if aliHTTPMock.requestsFor("direct-unit.test") != 1 || tencent.requestsFor("direct-unit.test") != 0 || cloudflare.requestsFor("direct-unit.test") != 0 {
 		t.Fatal("normal Ali primary response did not avoid both backup and proxy DNS")
 	}
-	if code, ttl := query(t, ordinaryAddress, "unmatched-unit.test", 1); code != 0 || ttl != 5 {
-		t.Fatal("default Cloudflare response or upstream TTL changed")
+	const unmatched = "unmatched-unit.test"
+	code, ttl, first := queryWithTimeout(t, ordinaryAddress, unmatched, 1, 2*time.Second)
+	if code != 0 || ttl != 5 {
+		t.Fatalf("default Cloudflare response changed: rcode=%d ttl=%d elapsed=%s", code, ttl, first)
 	}
-	query(t, ordinaryAddress, "unmatched-unit.test", 1)
-	if cloudflare.requestsFor("unmatched-unit.test") != 1 || google.requestsFor("unmatched-unit.test") != 0 {
-		t.Fatal("normal Cloudflare primary or ordinary cache selection changed")
+	code, ttl, second := queryWithTimeout(t, ordinaryAddress, unmatched, 1, 2*time.Second)
+	if primary, backup := cloudflare.requestsFor(unmatched), google.requestsFor(unmatched); code != 0 || ttl != 5 || primary != 1 || backup != 0 {
+		t.Fatalf("ordinary cache or provider selection changed: rcode=%d ttl=%d primary=%d backup=%d first=%s second=%s", code, ttl, primary, backup, first, second)
 	}
 	for _, address := range []string{ordinaryAddress, nodeAddress} {
 		assertBlocked(address, "ipv6-unit.test", 28)

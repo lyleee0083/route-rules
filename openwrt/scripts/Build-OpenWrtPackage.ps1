@@ -121,6 +121,10 @@ try {
     # Persist archive-relative paths, not the transaction directory deleted below.
     $dnsPolicy.paths.dns_direct_domains='dns-direct-domains.txt'
     $dnsPolicy.paths.mosdns_json='mosdns.json'
+    $dnsPolicy.paths | Add-Member -NotePropertyName dns_direct_rules -NotePropertyValue 'dns-direct-domains.mdrs'
+    if ([IO.File]::Exists((Join-Path $payload 'dns-reject-domains.mdrs'))) {
+        $dnsPolicy.paths | Add-Member -NotePropertyName dns_reject_rules -NotePropertyValue 'dns-reject-domains.mdrs'
+    }
     $manifest=[ordered]@{
         generated_at_utc=[DateTime]::UtcNow.ToString('o');status='local-package-not-deployed';backend='nftables-mosdns'
         external_core_assets=@($singBoxAsset,$mosdnsAsset)
