@@ -9,7 +9,7 @@
 
 ## 快速开始
 
-1. 从 [GitHub Releases](https://github.com/lyleee0083/route-rules/releases) 下载 `route-rules-clients-v<版本>.zip` 和 `SHA256SUMS.txt`，对照 `SHA256SUMS.txt` 核对 ZIP。
+1. 从 [GitHub Releases](https://github.com/lyleee0083/route-rules/releases) 或 [客户端工作流](https://github.com/lyleee0083/route-rules/actions/workflows/clients.yml) 下载 `route-rules-<版本>.zip` 和 `SHA256SUMS.txt`，对照 `SHA256SUMS.txt` 核对 ZIP。
 2. 解压 ZIP，选择对应平台的 `sing-box-*.json`。保留同目录下的 `rule-set/`。
 3. 在本地填写 `outbounds` 中 `tag` 为 `proxy` 的 VLESS REALITY 节点。构建包使用示例地址、UUID、公钥和短 ID。使用 sing-box 1.14.4 或支持 SRS v5 的兼容核心加载配置。
 
