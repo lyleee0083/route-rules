@@ -115,7 +115,7 @@ function Get-MosdnsAdapterPlanFromSnapshot {
             $set.path -cnotmatch '^rule-set/[A-Za-z0-9_-]+\.srs$' -or $ruleSetsByTag.ContainsKey([string]$set.tag)) {
             throw 'Unsupported or duplicate rule-set reference in the final Linux snapshot.'
         }
-        $setPath = Join-Path $root ($set.path.Replace('/', '\'))
+        $setPath = Join-Path $root $set.path
         if (-not (Test-Path -LiteralPath $setPath -PathType Leaf)) { throw ('Missing final SRS: ' + $set.path) }
         $ruleSetsByTag[[string]$set.tag] = [pscustomobject]@{ Tag=[string]$set.tag; Path=$setPath }
     }

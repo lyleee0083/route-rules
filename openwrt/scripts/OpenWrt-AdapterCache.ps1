@@ -258,8 +258,10 @@ function Get-OpenWrtAdapterCacheFingerprint {
     foreach ($path in $converterPaths) {
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw ('Adapter cache converter dependency is missing: ' + $path) }
         $resolved = [IO.Path]::GetFullPath($path)
-        $root = [IO.Path]::GetFullPath($projectRoot).TrimEnd('\') + '\'
-        if (-not $resolved.StartsWith($root,[StringComparison]::OrdinalIgnoreCase)) { throw 'Adapter cache converter dependency escaped the project root.' }
+        $separator = [IO.Path]::DirectorySeparatorChar
+        $root = [IO.Path]::GetFullPath($projectRoot).TrimEnd($separator) + $separator
+        $comparison = if ($separator -eq [char]'/') { [StringComparison]::Ordinal } else { [StringComparison]::OrdinalIgnoreCase }
+        if (-not $resolved.StartsWith($root,$comparison)) { throw 'Adapter cache converter dependency escaped the project root.' }
         $relative = $resolved.Substring($root.Length).Replace('\','/')
         $converterFiles.Add([pscustomobject][ordered]@{
             path = $relative
@@ -563,7 +565,7 @@ function Write-OpenWrtAdapterCache {
         foreach ($temporaryPath in @($pending,$backup)) {
             if (Test-Path -LiteralPath $temporaryPath) {
                 $item = Get-Item -LiteralPath $temporaryPath -Force -ErrorAction Stop
-                if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.DirectoryName -cne ([IO.Path]::GetFullPath($CacheDirectory).TrimEnd('\'))) { throw 'Refusing unsafe adapter cache temporary cleanup.' }
+                if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.DirectoryName -cne ([IO.Path]::GetFullPath($CacheDirectory).TrimEnd([IO.Path]::DirectorySeparatorChar))) { throw 'Refusing unsafe adapter cache temporary cleanup.' }
                 [IO.File]::Delete($temporaryPath)
             }
         }
