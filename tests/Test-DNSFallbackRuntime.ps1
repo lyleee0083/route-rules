@@ -5,7 +5,7 @@ Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $scriptsRoot = Join-Path $projectRoot 'scripts'
-. (Join-Path $scriptsRoot 'Official-SingBoxChecker.ps1')
+. (Join-Path $scriptsRoot 'SingBox-Checker.ps1')
 . (Join-Path $scriptsRoot 'Direct-RoutingPolicy.ps1')
 
 $allowedFixtureParents = @((Join-Path $projectRoot 'outputs'),(Join-Path $projectRoot 'work'))

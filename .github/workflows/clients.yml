@@ -22,10 +22,19 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-      - name: Install the pinned sing-box checker
+      - name: Enable ARM64 execution on Ubuntu
+        shell: bash
         run: |
-          . ./scripts/Official-Cores.ps1
-          $null = Install-OpenWrtBuildCores -Platforms sing-box-check
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-binfmt
+          sudo systemctl restart systemd-binfmt
+          test -f /proc/sys/fs/binfmt_misc/qemu-aarch64
+      - name: Install the pinned project sing-box build checker
+        run: |
+          . ./scripts/Core-Assets.ps1
+          $checker = Install-BuildCoreAsset -Asset (Get-SingBoxBuildAsset)
+          & $checker version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Test routing and archive contracts
         run: |
           $ErrorActionPreference = 'Stop'

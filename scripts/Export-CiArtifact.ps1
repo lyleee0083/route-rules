@@ -54,8 +54,8 @@ if ($BuildManifestPath) {
     $metadata.build = $native
 }
 else {
-    . (Join-Path $PSScriptRoot 'Official-Cores.ps1')
-    $metadata.checker = @(Get-OpenWrtOfficialAssets | Where-Object Platform -CEQ 'sing-box-check' | Select-Object Name,Repository,Tag,SHA256)[0]
+    . (Join-Path $PSScriptRoot 'Core-Assets.ps1')
+    $metadata.checker = Get-SingBoxBuildAsset
 }
 
 $encoding = New-Object Text.UTF8Encoding($false)

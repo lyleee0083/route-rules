@@ -7,7 +7,7 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 $scriptsRoot = Join-Path $projectRoot 'scripts'
 $configRoot = Join-Path $projectRoot 'config'
 $sourceRoot = Join-Path $projectRoot 'src'
-. (Join-Path $scriptsRoot 'Official-SingBoxChecker.ps1')
+. (Join-Path $scriptsRoot 'SingBox-Checker.ps1')
 $resolvedSingBox=Resolve-PinnedSingBoxChecker -ProjectRoot $projectRoot
 function Assert-StrictRepair { param([bool]$Condition, [string]$Message) if (-not $Condition) { throw $Message } }
 function Put-StrictText { param([string]$Path, [string]$Text) [IO.File]::WriteAllText($Path, $Text, (New-Object Text.UTF8Encoding($false))) }
@@ -36,10 +36,10 @@ try {
     $fixtureSource=Join-Path $fixture 'src'
     $fixturePins=Join-Path $fixture 'scripts'
     foreach ($directory in @($fixtureScripts,$fixtureConfig,$fixtureSource,$fixturePins)) { [IO.Directory]::CreateDirectory($directory) | Out-Null }
-    foreach ($file in @('Generate-SingBoxConfig.ps1','Json-Validation.ps1','Direct-RoutingPolicy.ps1','SameTypeDirectPolicy.ps1','DNS-BootstrapPolicy.ps1','Node-DnsPolicy.ps1','Build-Transaction.ps1','Config-Archive.ps1','Official-SingBoxChecker.ps1')) {
+    foreach ($file in @('Generate-SingBoxConfig.ps1','Json-Validation.ps1','Direct-RoutingPolicy.ps1','SameTypeDirectPolicy.ps1','DNS-BootstrapPolicy.ps1','Node-DnsPolicy.ps1','Build-Transaction.ps1','Config-Archive.ps1','SingBox-Checker.ps1')) {
         Copy-Item -LiteralPath (Join-Path $scriptsRoot $file) -Destination $fixtureScripts
     }
-    Copy-Item -LiteralPath (Join-Path $projectRoot 'scripts\Official-Cores.ps1') -Destination $fixturePins
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'scripts\Core-Assets.ps1') -Destination $fixturePins
     Copy-Item -LiteralPath (Join-Path $sourceRoot 'SameTypeDirectCompiler.cs') -Destination $fixtureSource
     Copy-Item -LiteralPath (Join-Path $configRoot 'sing-box-core-base.json') -Destination $fixtureConfig
     Copy-Item -LiteralPath (Join-Path $configRoot 'client-profiles.json') -Destination $fixtureConfig
