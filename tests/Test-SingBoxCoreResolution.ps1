@@ -26,12 +26,12 @@ function Assert-TestNoReparse {
     }
 }
 
-$projectFull=[IO.Path]::GetFullPath($projectRoot).TrimEnd('\')
-$fixtureParent=[IO.Path]::GetFullPath($TestRoot).TrimEnd('\')
+$projectFull=[IO.Path]::GetFullPath($projectRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
+$fixtureParent=[IO.Path]::GetFullPath($TestRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
 $allowed=$false
 foreach ($allowedName in @('work','outputs')) {
-    $allowedPath=[IO.Path]::GetFullPath((Join-Path $projectFull $allowedName)).TrimEnd('\')
-    if ($fixtureParent.StartsWith($allowedPath+'\',[StringComparison]::OrdinalIgnoreCase)) { $allowed=$true }
+    $allowedPath=[IO.Path]::GetFullPath((Join-Path $projectFull $allowedName)).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    if ($fixtureParent.StartsWith($allowedPath+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)) { $allowed=$true }
 }
 if (-not $allowed) { throw 'TestRoot must be a child of project work/ or outputs/.' }
 Assert-TestNoReparse -Path $fixtureParent
@@ -50,17 +50,15 @@ try {
     Assert-TestCondition ((Get-FileHash -LiteralPath $default -Algorithm SHA256).Hash -ceq [string]$checkerAsset[0].BinarySHA256) 'The default project checker hash must match its pin.'
 
     $explicit=Join-Path $runRoot 'explicit-marker.exe'
-    $fallback=Join-Path $runRoot 'fallback-marker.exe'
     [IO.File]::WriteAllBytes($explicit,[byte[]](1,2,3,4))
-    [IO.File]::WriteAllBytes($fallback,[byte[]](5,6,7,8))
-    $selected=Resolve-PinnedSingBoxChecker -ProjectRoot $projectRoot -RequestedPath $explicit -RuntimeFallbackPath $fallback
-    Assert-TestCondition ($selected -ceq [IO.Path]::GetFullPath($explicit)) 'An explicit checker path must take priority over the project pin and fallback.'
+    $selected=Resolve-PinnedSingBoxChecker -ProjectRoot $projectRoot -RequestedPath $explicit
+    Assert-TestCondition ($selected -ceq [IO.Path]::GetFullPath($explicit)) 'An explicit checker path must take priority over the project pin.'
 
     $emptyProject=Join-Path $runRoot 'no-project-core'
     [IO.Directory]::CreateDirectory((Join-Path $emptyProject 'scripts')) | Out-Null
     Copy-Item -LiteralPath (Join-Path $projectRoot 'scripts\Official-Cores.ps1') -Destination (Join-Path $emptyProject 'scripts\Official-Cores.ps1')
-    $fallbackSelected=Resolve-PinnedSingBoxChecker -ProjectRoot $emptyProject -RuntimeFallbackPath $fallback
-    Assert-TestCondition ($fallbackSelected -ceq [IO.Path]::GetFullPath($fallback)) 'With no fixed project assets, the compatibility fallback must remain available.'
+    $withoutPin=Resolve-PinnedSingBoxChecker -ProjectRoot $emptyProject
+    Assert-TestCondition ($null -eq $withoutPin) 'An absent pinned installation must not select another binary.'
 
     $badProject=Join-Path $runRoot 'bad-project-core'
     $badScript=Join-Path $badProject 'scripts'
@@ -71,20 +69,20 @@ try {
     [IO.Directory]::CreateDirectory($versionRoot) | Out-Null
     Copy-Item -LiteralPath (Join-Path $projectRoot 'scripts\Official-Cores.ps1') -Destination (Join-Path $badScript 'Official-Cores.ps1')
     [IO.File]::WriteAllBytes((Join-Path $badCores ([string]$checkerAsset[0].Name)),[byte[]](9,8,7,6))
-    [IO.File]::WriteAllBytes((Join-Path $versionRoot 'sing-box.exe'),[byte[]](1,1,1,1))
+    [IO.File]::WriteAllBytes((Join-Path $versionRoot 'sing-box'),[byte[]](1,1,1,1))
     $badPinRejected=$false
-    try { $null=Resolve-PinnedSingBoxChecker -ProjectRoot $badProject -RuntimeFallbackPath $fallback }
+    try { $null=Resolve-PinnedSingBoxChecker -ProjectRoot $badProject }
     catch { $badPinRejected=$true }
     Assert-TestCondition $badPinRejected 'A stale or corrupt project pin must fail instead of silently falling back.'
 
     $missingProject=Join-Path $runRoot 'missing-project-core'
     $missingScripts=Join-Path $missingProject 'scripts'
-    $missingVersion=Join-Path (Join-Path $missingProject 'openwrt\build-stage\cores\sing-box-check') 'sing-box-1.14.3-windows-amd64'
+    $missingVersion=Join-Path (Join-Path $missingProject 'openwrt\build-stage\cores\sing-box-check') 'sing-box-1.14.3-linux-amd64-musl'
     [IO.Directory]::CreateDirectory($missingScripts) | Out-Null
     [IO.Directory]::CreateDirectory($missingVersion) | Out-Null
     Copy-Item -LiteralPath (Join-Path $projectRoot 'scripts\Official-Cores.ps1') -Destination (Join-Path $missingScripts 'Official-Cores.ps1')
     $missingPinRejected=$false
-    try { $null=Resolve-PinnedSingBoxChecker -ProjectRoot $missingProject -RuntimeFallbackPath $fallback }
+    try { $null=Resolve-PinnedSingBoxChecker -ProjectRoot $missingProject }
     catch { $missingPinRejected=$true }
     Assert-TestCondition $missingPinRejected 'A stale version tree missing the current pin must fail instead of falling back.'
 
@@ -98,9 +96,9 @@ try {
     Copy-Item -LiteralPath (Join-Path $projectRoot 'scripts\Official-Cores.ps1') -Destination (Join-Path $badBinaryScripts 'Official-Cores.ps1')
     $pinnedArchive=Join-Path $coreRoot ([string]$checkerAsset[0].Name)
     Copy-Item -LiteralPath $pinnedArchive -Destination (Join-Path $badBinaryCores ([string]$checkerAsset[0].Name))
-    [IO.File]::WriteAllBytes((Join-Path $badBinaryVersion 'sing-box.exe'),[byte[]](2,4,6,8))
+    [IO.File]::WriteAllBytes((Join-Path $badBinaryVersion 'sing-box'),[byte[]](2,4,6,8))
     $badBinaryRejected=$false
-    try { $null=Resolve-PinnedSingBoxChecker -ProjectRoot $badBinaryProject -RuntimeFallbackPath $fallback }
+    try { $null=Resolve-PinnedSingBoxChecker -ProjectRoot $badBinaryProject }
     catch { $badBinaryRejected=$_.Exception.Message -match 'checker binary is corrupt' }
     Assert-TestCondition $badBinaryRejected 'A current archive with an independently corrupted checker binary must fail instead of falling back.'
 
@@ -116,10 +114,10 @@ try {
     Copy-Item -LiteralPath (Join-Path $projectRoot 'scripts\Official-Cores.ps1') -Destination (Join-Path $linkedVersionScripts 'Official-Cores.ps1')
     Copy-Item -LiteralPath (Join-Path $coreRoot ([string]$checkerAsset[0].Name)) -Destination (Join-Path $linkedVersionCores ([string]$checkerAsset[0].Name))
     $linkedTargetBinaryHash=(Get-FileHash -LiteralPath $expected -Algorithm SHA256).Hash
-    New-Item -ItemType Junction -Path $linkedVersionPath -Target $linkedVersionTarget -ErrorAction Stop | Out-Null
+    New-Item -ItemType SymbolicLink -Path $linkedVersionPath -Target $linkedVersionTarget -ErrorAction Stop | Out-Null
     try {
         $linkedVersionRejected=$false
-        try { $null=Resolve-PinnedSingBoxChecker -ProjectRoot $linkedVersionProject -RuntimeFallbackPath $fallback }
+        try { $null=Resolve-PinnedSingBoxChecker -ProjectRoot $linkedVersionProject }
         catch { $linkedVersionRejected=$_.Exception.Message -match 'reparse point' }
         Assert-TestCondition $linkedVersionRejected 'A reparse point at the pinned platform version directory must be rejected.'
         Assert-TestCondition ((Get-FileHash -LiteralPath $expected -Algorithm SHA256).Hash -ceq $linkedTargetBinaryHash) 'Rejecting a linked version directory must leave its target binary unchanged.'
@@ -144,7 +142,7 @@ try {
             else { [IO.Directory]::CreateDirectory((Join-Path $typeCores ([string]$checkerAsset[0].Name))) | Out-Null }
         }
         $typeRejected=$false
-        try { $null=Resolve-PinnedSingBoxChecker -ProjectRoot $typeProject -RuntimeFallbackPath $fallback }
+        try { $null=Resolve-PinnedSingBoxChecker -ProjectRoot $typeProject }
         catch { $typeRejected=$true }
         Assert-TestCondition $typeRejected ('A project path type conflict must not fall back: '+$kind)
     }
