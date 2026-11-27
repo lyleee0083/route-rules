@@ -56,7 +56,7 @@ jobs:
           ./openwrt/scripts/Sync-FinalLinuxSnapshot.ps1
       - name: Build and verify the BE7000 package
         run: |
-          $go = (Get-Command go.exe -CommandType Application -ErrorAction Stop).Source
+          $go = (Get-Command go.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
           ./openwrt/scripts/Build-OpenWrtPackage.ps1 -GoPath $go -ConnectionVerdictCache
           ./openwrt/tests/Test-NftKernelPolicy.ps1
           ./openwrt/tests/Test-ProxyConfiguration.ps1
