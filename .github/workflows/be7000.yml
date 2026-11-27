@@ -5,7 +5,6 @@ on:
     branches: [xiaomi-be7000]
   push:
     branches: [xiaomi-be7000]
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -52,7 +51,8 @@ jobs:
           $null = Install-OpenWrtBuildCores
       - name: Generate the Linux client snapshot
         run: |
-          ./scripts/Generate-SingBoxConfig.ps1 -All -RequireSingBox
+          $zstd = ./scripts/Get-CiZstd.ps1
+          ./scripts/Generate-SingBoxConfig.ps1 -All -RequireSingBox -ZstdLibraryPath $zstd
           ./openwrt/scripts/Sync-FinalLinuxSnapshot.ps1
       - name: Build and verify the BE7000 package
         run: |

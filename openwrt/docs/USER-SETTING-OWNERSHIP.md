@@ -12,7 +12,7 @@
 
 ECM 开关和模块状态始终由用户控制。项目不写 ECM 开关，不轮询 ECM 作为健康门槛，不要求关闭硬件加速，也不以 ECM 计数判定分流成功。单独授权的旧加速缓存清理不等于修改 ECM 开关或全局 conntrack。
 
-可选连接 verdict cache 只使用项目已有的 `0x60000000` connmark 保留位，不扩展标记位、不清除 conntrack，也不写 ECM/PPE/SFE/flow-offload 设置。`ctmark-v1` 本地 ZIP 已通过独立 package/目标语法检查并作版本化交付，但尚未安装、激活或测吞吐收益。手动更新和重启边界来自[连接 cache 说明](CONNECTION-CACHE.md)。
+可选连接 verdict cache 只使用项目已有的 `0x60000000` connmark 保留位，不扩展标记位、不清除 conntrack，也不写 ECM/PPE/SFE/flow-offload 设置。GitHub Actions 构建使用 `ctmark-v1`。缓存的设备行为与性能需在目标路由器验收。
 
 sing-box 仅负责代理，不启用 `auto_redirect`；项目 nftables 只操作登记的自有规则/集合及保留标记位。启动失败或进程退出时，按事件路径清理项目对象并恢复项目选项；不持续监控、自动修复用户环境或自动重启核心。已实现本地生命周期模型，真实设备行为仍待单独验证。核心首条拒绝 IPv6、mosdns 拒绝 AAAA；项目不添加 IPv6 策略路由或禁用固件全局 IPv6。
 
