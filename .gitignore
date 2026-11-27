@@ -1,13 +1,13 @@
-/generated/
-/outputs/
+# GitHub Actions checkouts and build workspace.
+/.shared-main/
+/build/
+
 /backups/
 /work/
 /openwrt/build-stage/
 /openwrt/generated/
 /openwrt/inputs/linux/
 /openwrt/outputs/
-/routing/cache/
-/routing/merged/
 *.build.lock
 *.update.lock
 *.local.json
@@ -15,9 +15,6 @@ __pycache__/
 *.pyc
 
 # Temporary state beside the default publication paths.
-/generated.build-stage/
-/generated.build-backup/
-/generated.build-journal.json*
 /openwrt/generated.build-stage/
 /openwrt/generated.build-backup/
 /openwrt/generated.build-journal.json*
@@ -25,5 +22,3 @@ __pycache__/
 /openwrt/inputs/linux.build-stage/
 /openwrt/inputs/linux.build-backup/
 /openwrt/inputs/linux.build-journal.json*
-/routing/cache.update.stage/
-/routing/cache.update.backup/
