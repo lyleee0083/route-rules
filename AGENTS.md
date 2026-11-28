@@ -12,6 +12,7 @@ These instructions apply to all agents working in this repository.
 
 ### Repository changes
 
+- Keep maintained non-default branches limited to branch-specific files and required branch metadata. Maintain shared files once on `main` and reuse them from that branch.
 - Make fixes directly in the maintained source code, configuration, or build logic that owns the behavior, including in forks. Do not add patch files, build-time source rewrites, or redundant wrappers as substitutes for direct fixes.
 - Start new upstream-based work and upstream updates from the latest commit on the applicable upstream branch. Verify the branch tip remotely and record the upstream repository, branch, and full commit SHA. Use the upstream default branch unless the task specifies another branch or revision.
 - Run all repository builds and compilation exclusively in GitHub Actions; do not build or compile locally. Deliver the verified artifacts from the successful workflow run.
