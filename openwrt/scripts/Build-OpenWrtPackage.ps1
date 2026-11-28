@@ -20,6 +20,8 @@ $sharedScriptsRoot = Join-Path $projectRoot 'scripts'
 $sourceTreeRoot = Join-Path $openWrtRoot 'src'
 $buildStageRoot = Join-Path $openWrtRoot 'build-stage'
 $nativeSource = Join-Path $sourceTreeRoot 'native'
+$sharedMainRevision=$env:ROUTE_RULES_MAIN_REVISION
+if ($sharedMainRevision -and $sharedMainRevision -cnotmatch '^[0-9a-f]{40}$') { throw 'Invalid shared main revision.' }
 $connectionCacheMode='off-v1'
 if ($ConnectionVerdictCache) { $connectionCacheMode='ctmark-v1' }
 if (-not $LinuxArchivePath) { $LinuxArchivePath=Join-Path $projectRoot 'outputs/openwrt-client/sing-box-configs.zip' }
@@ -139,6 +141,7 @@ try {
         ownership=[ordered]@{nft_table='inet sb_proxy';firewall_include='firewall.sb_proxy_forward';firewall_input_include='firewall.sb_proxy_input';mark_mask='0x60000000';route_tables=@(10073,10074);dns_options=@('server','noresolv')}
         deferred=[ordered]@{multi_queue='requires a released stable core with the field';new_tun_stack='requires a released stable core with the stack';auto_redirect='stable support exists; replacement requires target kernel, port/IP bypass, fw4 mark/order and acceleration validation';native_nft_check='requires separately authorized target-device validation';device_acceptance='not executed; requires separate authorization'}
     }
+    if ($sharedMainRevision) { $manifest['shared_main_commit']=$sharedMainRevision }
     [IO.File]::WriteAllText((Join-Path $supportPaths.Stage 'build-manifest.json'),(Format-JsonText -Text ($manifest | ConvertTo-Json -Depth 100 -Compress))+"`n",$encoding)
     Move-Item -LiteralPath $temporaryZip -Destination (Join-Path $paths.Stage 'openwrt.zip')
     Remove-OpenWrtPayload -Path $payload -ExpectedPath (Join-Path $paths.Stage '.payload')

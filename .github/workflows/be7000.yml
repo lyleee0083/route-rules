@@ -34,13 +34,32 @@ jobs:
     needs: linux-tests
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    env:
+      ROUTE_RULES_MAIN_REVISION: 165604a4966318c911349e1f48432ac7e44e9385
     defaults:
       run:
         shell: pwsh
+        working-directory: build
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+      - name: Check out shared sources from main
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ env.ROUTE_RULES_MAIN_REVISION }}
+          path: .shared-main
+          persist-credentials: false
+      - name: Assemble the BE7000 build directory
+        shell: bash
+        working-directory: .
+        run: |
+          shared_revision=$(git -C .shared-main rev-parse HEAD)
+          test "$shared_revision" = "$ROUTE_RULES_MAIN_REVISION"
+          mkdir -- build
+          git -C .shared-main archive "$shared_revision" config routing scripts src | tar -xf - -C build
+          git archive HEAD openwrt VERSION | tar -xf - -C build
+          echo "Shared route-rules source from main: $shared_revision"
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: '1.27.1'
